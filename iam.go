@@ -17,6 +17,15 @@ import (
   "github.com/Sirupsen/logrus"
 )
 
+
+func GetSession(profile, configFile string) (*session.Session, error) {
+  s, err := session.NewSessionWithOptions(session.Options{
+    Profile: profile,
+    SharedConfigState: session.SharedConfigEnable,
+  })
+  return s, err
+}
+
 // TODO: Verify that this  "does the right thing" if the creds file doesn't exist.
 // Also, consider filling it out by looking at a 'config' file as well.
 // profile is an AWS profile to use for creds, crefile is where creds
@@ -29,6 +38,7 @@ import (
 // Look for credentials in a credential file provide by the credFile argument.
 // If that string is "", look in ~/.aws/.credentials
 // If there is no cred file then check the environment.
+
 
 func GetConfig(profile string, credFile string) (*aws.Config) {
   config := defaults.Get().Config
