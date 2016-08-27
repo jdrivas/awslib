@@ -4,7 +4,7 @@ import (
   "fmt"
   "encoding/base64"
   "github.com/aws/aws-sdk-go/aws"
-  "github.com/aws/aws-sdk-go/aws/credentials"
+  // "github.com/aws/aws-sdk-go/aws/credentials"
   "github.com/aws/aws-sdk-go/service/ec2"
   // "github.com/Sirupsen/logrus"
 )
@@ -187,7 +187,7 @@ func LaunchInstance(clusterName string, ec2Svc *ec2.EC2) (*ec2.Reservation, erro
 func getUserData(clusterName string) (s string, err error) {
   ecsConfig, err := getECSConfigString(clusterName)
   if err != nil { return s, fmt.Errorf("Can't get ecs.config contents: %s", err) }
-  credentialsConfig, err := getCredentialsString()
+  credentialsConfig, err := getConfigFileString()
   if err != nil { return s, fmt.Errorf("Can't get instance credentials contents: %s", err) }
 
   userDataString := ecsConfig + credentialsConfig
@@ -220,22 +220,23 @@ func getECSConfigString(clusterName string) (s string, err error) {
 }
 
 // Sigh ....
-func getCredentialsString() (s string, err error) {
-  credDir := "/opt/configuration"
-  credFileName := credDir + "/credentials"
-  credProfileName := awslibConfig[InstCredProfileKey]
-  accessKeyId, secretAccessKey, err := getInstanceAWSKeys()
+func getConfigFileString() (s string, err error) {
+  configDir := "/opt/configuration"
+  configFileName := configDir + "/configuration"
+  configProfileName := awslibConfig[InstConfigProfileKey]
+  accessKeyId, secretAccessKey, region, err := getInstanceConfig()
   if err != nil {return s, err}
   template :=`
 if [ ! -e %s ]; then
 mkdir -p %s
 fi
 cat <<EOF  >>%s
-[%s]
+[profile %s]
 aws_access_key_id=%s
 aws_secret_access_key=%s
+region=%s
 EOF`
-  s += fmt.Sprintf(template, credDir, credDir, credFileName, credProfileName, accessKeyId, secretAccessKey)
+  s += fmt.Sprintf(template, configDir, configDir, configFileName, configProfileName, accessKeyId, secretAccessKey, region)
   return s, err
 }
 
@@ -261,15 +262,22 @@ func getAmi() (string) {
 
 // Returns AWS keys to be used by containers running on an instance.
 // e.g. to make calls to S3 or EC2.
-func getInstanceAWSKeys() (accessKeyId string, secretAccessKey string, err error) {
-  credFile := awslibConfig[InstCredFileKey]
-  credProfile := awslibConfig[InstCredProfileKey]
-  creds, err := credentials.NewSharedCredentials(credFile,credProfile).Get()
+func getInstanceConfig() (accessKeyId, secretAccessKey, region string, err error) {
+  // credFile := awslibConfig[InstCredFileKey]
+  // credProfile := awslibConfig[InstCredProfileKey]
+  // creds, err := credentials.NewSharedCredentials(credFile,credProfile).Get()
+  configFile := awslibConfig[InstConfigFileKey]
+  configProfile := awslibConfig[InstConfigProfileKey]
+  session, err := GetSession(configProfile, configFile)
+  region = *session.Config.Region
   if err == nil {
-    accessKeyId = creds.AccessKeyID
-    secretAccessKey = creds.SecretAccessKey
+    creds, err := session.Config.Credentials.Get()
+    if err == nil {
+      accessKeyId = creds.AccessKeyID
+      secretAccessKey = creds.SecretAccessKey
+    }
   }
-  return accessKeyId, secretAccessKey, err
+  return accessKeyId, secretAccessKey, region, err
 }
 
 func getInstanceType() (string) {
