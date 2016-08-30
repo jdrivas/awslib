@@ -387,3 +387,6 @@ func OnInstanceTerminated(instanceId *string, ec2Svc *ec2.EC2, do func(error)) {
     do(err)
   }()
 }
+
+
+

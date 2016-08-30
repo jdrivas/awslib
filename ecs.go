@@ -704,3 +704,18 @@ func CompleteEmptyTaskDefinition() (ecs.RegisterTaskDefinitionInput) {
 //   }()
 // }
 
+
+//
+// Containers
+//
+
+const (
+  ContainerStateRunning = "RUNNING"
+  ContainerStatePending = "PENDING"
+)
+
+// check for !running and !pending as opposed to just STOPPED.
+func ContainerStatusOk(c *ecs.Container) bool {
+  return *c.LastStatus == "PENDING" || *c.LastStatus == "RUNNING"
+}
+
