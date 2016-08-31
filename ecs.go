@@ -3,6 +3,7 @@ package awslib
 import (
   "fmt"
   "errors"
+  "sort"
   "time"
   "github.com/aws/aws-sdk-go/aws"
   "github.com/aws/aws-sdk-go/service/ecs"
@@ -232,6 +233,8 @@ func OnContainerInstanceActive(clusterName string, ec2InstanceId string, ecsSvc 
 //
 
 
+// We often need quite a lot of information with a tastk.
+// Deep task goes and gets all of it.
 type DeepTask struct {
   Task *ecs.Task
   Failure *ecs.Failure
@@ -240,8 +243,24 @@ type DeepTask struct {
   EC2Instance *ec2.Instance
 }
 
+// TODO: There are more of these to do ...... 
+func (dtm DeepTask) Uptime() (ut time.Duration, err error) {
+  // Panic right away on empty DeepTask
+  start := dtm.Task.StartedAt
+  if start != nil {
+    ut = time.Since(*start)
+  } else {
+    err = fmt.Errorf("Empty ecs.Task.StartedAt can't compute uptime.")
+  }
+  return ut, err
+}
+
+
 // [TaskArn]DeepTask
+// Getting a collections of deep tasks.
 type DeepTaskMap map[string]*DeepTask
+
+
 
 func GetDeepTasks(clusterName string, ecsSvc *ecs.ECS, ec2Svc *ec2.EC2) (dtm DeepTaskMap, err error) {
   dtm = make(DeepTaskMap)
@@ -274,6 +293,59 @@ func GetDeepTasks(clusterName string, ecsSvc *ecs.ECS, ec2Svc *ec2.EC2) (dtm Dee
   return dtm, err
 }
 
+// DeepTaskMask sorting interface.
+type DeepTaskSortType int
+const(
+  ByUptime DeepTaskSortType = iota
+  ByReverseUptime
+)
+
+func (dtm DeepTaskMap) DeepTasks(st DeepTaskSortType) (dts []*DeepTask) {
+  dts = make([]*DeepTask, 0, len(dtm))
+  for _, dt := range dtm {
+    dts = append(dts, dt)
+  }
+  switch st {
+    case ByUptime: By(uptime).Sort(dts)
+    case ByReverseUptime: By(reverseUptime).Sort(dts)
+  }
+  return dts
+}
+
+// Definition of a deepTask sort less function
+type By func(dt1, dt2 *DeepTask) bool
+
+// Sort uses the less functiom from by, and the stSorter to actually do a sort.
+func (by By) Sort(dts []*DeepTask) {
+  sorter := &dtSorter{
+    dts: dts,
+    by: by,
+  }
+  sort.Sort(sorter)
+}
+// dtSorter, this holds Len() and Swap() and keeps 
+// a variable for a pluggable Less()
+type dtSorter struct {
+  dts []*DeepTask
+  by func(dt1, dt2 *DeepTask) bool
+}
+
+// For sort ..
+func (s *dtSorter) Len() int { return len(s.dts) }
+func (s *dtSorter) Swap(i,j int) { s.dts[i], s.dts[j] = s.dts[j], s.dts[i] }
+func (s *dtSorter) Less(i,j int) bool { return s.by(s.dts[i], s.dts[j]) }
+
+var uptime = func(dt1, dt2 *DeepTask) bool {
+  ut1, _ := dt1.Uptime()
+  ut2, _ := dt2.Uptime()
+  return ut1 < ut2
+}
+
+var reverseUptime = func(dt1, dt2 *DeepTask) bool {
+  ut1, _ := dt1.Uptime()
+  ut2, _ := dt2.Uptime()
+  return ut2 < ut1
+}
 
 func ListTasksForCluster(clusterName string, ecs_svc *ecs.ECS) ([]*string, error) {
 
@@ -284,6 +356,7 @@ func ListTasksForCluster(clusterName string, ecs_svc *ecs.ECS) ([]*string, error
   resp, err := ecs_svc.ListTasks(params)
   return resp.TaskArns, err
 }
+
 
 type ContainerTask struct {
   Task *ecs.Task
@@ -358,6 +431,8 @@ func RunTaskWithEnv(clusterName string, taskDefArn string, envMap ContainerEnvir
   return resp, err
 }
 
+// ConatinerEnvironmentMap is environments keyed on containers nams.
+// Environment is [key]:value (all strings).
 func (envMap ContainerEnvironmentMap)ToTaskOverride() (to ecs.TaskOverride) {
   containerOverrides := []*ecs.ContainerOverride{}
   for containerName, env := range envMap {
