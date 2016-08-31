@@ -2,11 +2,12 @@ package awslib
 
 import (
   "fmt"
+  "path/filepath"
   "encoding/base64"
   "github.com/aws/aws-sdk-go/aws"
   // "github.com/aws/aws-sdk-go/aws/credentials"
   "github.com/aws/aws-sdk-go/service/ec2"
-  // "github.com/Sirupsen/logrus"
+  "github.com/Sirupsen/logrus"
 )
 
 
@@ -221,8 +222,9 @@ func getECSConfigString(clusterName string) (s string, err error) {
 
 // Sigh ....
 func getConfigFileString() (s string, err error) {
-  configDir := "/opt/configuration"
-  configFileName := configDir + "/configuration"
+  // /opt/configuration/config
+  configDir := filepath.Join("/opt", "configuration")
+  configFileName := filepath.Join(configDir, "configuration")
   configProfileName := awslibConfig[InstConfigProfileKey]
   accessKeyId, secretAccessKey, region, err := getInstanceConfig()
   if err != nil {return s, err}
@@ -270,6 +272,11 @@ func getInstanceConfig() (accessKeyId, secretAccessKey, region string, err error
   configProfile := awslibConfig[InstConfigProfileKey]
   session, err := GetSession(configProfile, configFile)
   region = *session.Config.Region
+  log.Debug(logrus.Fields{
+    "file": configFile, 
+    "profile": configProfile, 
+    "region": region,
+  }, "Getting instance configuration from.")
   if err == nil {
     creds, err := session.Config.Credentials.Get()
     if err == nil {

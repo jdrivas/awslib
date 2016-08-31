@@ -55,7 +55,7 @@ func NewConfig() (libConfig) {
     log.Fatal(nil, "Can't get the current user.", err)
   }
   homeDir := user.HomeDir
-  filePath := filepath.Join(homeDir,"Documents", "Keys", "momentlabs.io", "dev")
+  filePath := filepath.Join(homeDir,"Documents", "Keys", "momentlabs.io", "development")
   credPath := filepath.Join(filePath, "instance_credentials")
   configPath := filepath.Join(filePath, "instance_configuration")
   config := make(libConfig)
@@ -70,3 +70,4 @@ func NewConfig() (libConfig) {
   }
   return config
 }
+
