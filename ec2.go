@@ -5,6 +5,7 @@ import (
   "path/filepath"
   "encoding/base64"
   "github.com/aws/aws-sdk-go/aws"
+  "github.com/aws/aws-sdk-go/aws/session"
   // "github.com/aws/aws-sdk-go/aws/credentials"
   "github.com/aws/aws-sdk-go/service/ec2"
   "github.com/Sirupsen/logrus"
@@ -12,8 +13,8 @@ import (
 
 
 // Returns a map of *ec2.Instance keyed on the associated InstanceId.
-func DescribeEC2Instances(ciMap ContainerInstanceMap, ec2_svc *ec2.EC2) (map[string]*ec2.Instance, error) {
-  // ec2_svc := ec2.New(session.New(config))
+func DescribeEC2Instances(ciMap ContainerInstanceMap, sess *session.Session) (map[string]*ec2.Instance, error) {
+  ec2_svc := ec2.New(sess)
   params := &ec2.DescribeInstancesInput {
     DryRun: aws.Bool(false),
     InstanceIds: ciMap.GetEc2InstanceIds(),
@@ -30,7 +31,8 @@ func DescribeEC2Instances(ciMap ContainerInstanceMap, ec2_svc *ec2.EC2) (map[str
   return instances, err
 }
 
-func GetInstancesForIds(ids []*string, ec2Svc *ec2.EC2) (instances []*ec2.Instance, err error) {
+func GetInstancesForIds(ids []*string, sess *session.Session ) (instances []*ec2.Instance, err error) {
+ ec2Svc := ec2.New(sess)
   instances = make([]*ec2.Instance,0, 1) // we usually only get 1 of these.
   params := &ec2.DescribeInstancesInput {
     DryRun: aws.Bool(false),
@@ -47,8 +49,8 @@ func GetInstancesForIds(ids []*string, ec2Svc *ec2.EC2) (instances []*ec2.Instan
   return instances, err
 }
 
-func GetInstanceForId(instanceId string, ec2Svc *ec2.EC2)(inst *ec2.Instance, err error) {
-  instances, err := GetInstancesForIds([]*string{&instanceId}, ec2Svc)
+func GetInstanceForId(instanceId string, sess *session.Session)(inst *ec2.Instance, err error) {
+  instances, err := GetInstancesForIds([]*string{&instanceId}, sess)
   if err == nil {
     for _, inst = range instances {
       if *inst.InstanceId == instanceId {break}
@@ -74,8 +76,8 @@ func GetInstanceForId(instanceId string, ec2Svc *ec2.EC2)(inst *ec2.Instance, er
 // }
 
 
-func LaunchInstanceWithTags(clusterName string, tags []*ec2.Tag, ec2Svc *ec2.EC2) (*ec2.Reservation, error) {
-
+func LaunchInstanceWithTags(clusterName string, tags []*ec2.Tag, sess *session.Session) (*ec2.Reservation, error) {
+  ec2Svc := ec2.New(sess)
   res, err := LaunchInstance(clusterName, ec2Svc)
   if err == nil {
     params := &ec2.DescribeInstancesInput{
@@ -338,7 +340,8 @@ func getBlockDeviceMappings() ([]*ec2.BlockDeviceMapping) {
   }
 }
 
-func OnInstanceRunning(reservation *ec2.Reservation, ec2_svc *ec2.EC2, do func(error)) {
+func OnInstanceRunning(reservation *ec2.Reservation, sess *session.Session, do func(error)) {
+  ec2Svc := ec2.New(sess)
   go func() {
     params := &ec2.DescribeInstancesInput{
       DryRun: aws.Bool(false),
@@ -349,7 +352,7 @@ func OnInstanceRunning(reservation *ec2.Reservation, ec2_svc *ec2.EC2, do func(e
         },
       },
     }
-    err := ec2_svc.WaitUntilInstanceRunning(params)
+    err := ec2Svc.WaitUntilInstanceRunning(params)
     do(err)
   }()
 }

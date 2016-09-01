@@ -367,8 +367,7 @@ func getContainerMaps(clusterName string, sess *session.Session) (ciMap Containe
       fmt.Errorf("Couldn't get the ContainerInstance for the cluster %s: %s", clusterName, err)
   }
 
-  ec2Svc := ec2.New(sess)
-  ec2Map, err = DescribeEC2Instances(ciMap, ec2Svc)
+  ec2Map, err = DescribeEC2Instances(ciMap, sess)
   if err != nil {
     return ciMap, ec2Map, 
       fmt.Errorf("Couldn't get the EC2 Instances for the cluster %s: %s", clusterName, err)
