@@ -6,10 +6,11 @@ import (
   "sort"
   "time"
   "github.com/aws/aws-sdk-go/aws"
+  "github.com/aws/aws-sdk-go/aws/session"
   "github.com/aws/aws-sdk-go/service/ecs"
   "github.com/aws/aws-sdk-go/service/ec2"
-  // "github.com/op/go-logging"
   "github.com/spf13/viper"
+  "github.com/Sirupsen/logrus"
 )
 
 
@@ -62,8 +63,8 @@ func DescribeCluster(clusterName string, svc *ecs.ECS) ([]*ecs.Cluster, error) {
 }
 
 // func GetAllClusterDescriptions(ecsSvc *ecs.ECS) ([]*ecs.Cluster, error) {
-func GetAllClusterDescriptions(ecsSvc *ecs.ECS) (Clusters, error) {
-
+func GetAllClusterDescriptions(sess *session.Session) (Clusters, error) {
+  ecsSvc := ecs.New(sess)
   clusterArns, err := GetClusters(ecsSvc)
   if err != nil {return make([]*ecs.Cluster, 0), err}
 
@@ -124,18 +125,22 @@ func (cs rClusterByActivity) Less (j, i int) bool {
 // CONTAINER INSTANCES
 //
 
-func GetContainerInstances(clusterName string, svc *ecs.ECS)([]*string, error) {
+// returns a list of Containerinstance ARNS.
+func GetContainerInstances(clusterName string, sess *session.Session)([]*string, error) {
+  ecsSvc := ecs.New(sess)
   params := &ecs.ListContainerInstancesInput {
     Cluster: aws.String(clusterName),
     MaxResults: aws.Int64(100),
   }
-  resp, err := svc.ListContainerInstances(params)
+  resp, err := ecsSvc.ListContainerInstances(params)
   if err != nil { return []*string{}, err }
 
   return resp.ContainerInstanceArns, nil
 }
 
 
+// Capturing the fact that whenever you actually get the
+// description you also get potential failures.
 type ContainerInstance struct {
   Instance  *ecs.ContainerInstance
   Failure *ecs.Failure
@@ -144,31 +149,31 @@ type ContainerInstance struct {
 // Keyed on ConatinerInstanceArn or Ec2InstanceId
 type ContainerInstanceMap map[string]*ContainerInstance
 
-// Retruns CI's keyed on ContainerInstanceArn
-func GetAllContainerInstanceDescriptions(clusterName string, svc *ecs.ECS) (ContainerInstanceMap, error) {
+func GetAllContainerInstanceDescriptions(clusterName string, sess *session.Session) (ContainerInstanceMap, error) {
 
-  instanceArns, err := GetContainerInstances(clusterName, svc)
+  instanceArns, err := GetContainerInstances(clusterName, sess)
   if err != nil { return make(ContainerInstanceMap), err }
 
   if len(instanceArns) <= 0 {
     return make(ContainerInstanceMap), nil
   }
 
+  ecsSvc := ecs.New(sess)
   params := &ecs.DescribeContainerInstancesInput {
     ContainerInstances: instanceArns,
     Cluster: aws.String(clusterName),
   }
-  resp, err := svc.DescribeContainerInstances(params)
+  resp, err := ecsSvc.DescribeContainerInstances(params)
   return makeCIMapFromDescribeContainerInstancesOutput(resp), err
 }
 
-func GetContainerInstanceDescription(clusterName string, containerArn string, ecs_svc *ecs.ECS) (ContainerInstanceMap, error) {
-
+func GetContainerInstanceDescription(clusterName string, containerArn string, sess *session.Session) (ContainerInstanceMap, error) {
+  ecsSvc := ecs.New(sess)
   params := &ecs.DescribeContainerInstancesInput{
     ContainerInstances: []*string{aws.String(containerArn)},
     Cluster: aws.String(clusterName),
   }
-  resp, err := ecs_svc.DescribeContainerInstances(params)
+  resp, err := ecsSvc.DescribeContainerInstances(params)
   return makeCIMapFromDescribeContainerInstancesOutput(resp), err
 }
 
@@ -183,7 +188,10 @@ func makeCIMapFromDescribeContainerInstancesOutput(dcio *ecs.DescribeContainerIn
     ciMap[*instance.ContainerInstanceArn] =  ci
   }
   // ... and failures.
-  for _, failure := range dcio.Failures {
+  for _, failure := range dcio.Failures { 
+    // TODO: There is a bug here if we return more than one failure for a conatiner.
+    // This should be a list of failures, or we should read the SDK code and determine
+    // that only failure is ever returned. This pattern is throughout this library.
     ci := ciMap[*failure.Arn]
     if ci == nil {
       ci := new(ContainerInstance)
@@ -248,10 +256,9 @@ func getInstanceId(containerInstances []*ecs.ContainerInstance, containerArn str
   return instanceId
 }
 
-func WaitUntilContainerInstanceActive(clusterName string, ec2InstanceId string, ecsSvc *ecs.ECS) (*ecs.ContainerInstance, error) {
-
+func WaitUntilContainerInstanceActive(clusterName string, ec2InstanceId string, sess *session.Session) (*ecs.ContainerInstance, error) {
   for {
-    resp, err := GetAllContainerInstanceDescriptions(clusterName, ecsSvc)
+    resp, err := GetAllContainerInstanceDescriptions(clusterName, sess)
     if err != nil {
       return nil, fmt.Errorf("WaitUntilContainerInstanceActive: failed to get instance desecription on %s with %s : %s", clusterName, ec2InstanceId, err)
     }
@@ -267,9 +274,9 @@ func WaitUntilContainerInstanceActive(clusterName string, ec2InstanceId string, 
   // We should never get here.
 }
 
-func OnContainerInstanceActive(clusterName string, ec2InstanceId string, ecsSvc *ecs.ECS, do func(*ecs.ContainerInstance, error)) {
+func OnContainerInstanceActive(clusterName string, ec2InstanceId string, sess *session.Session, do func(*ecs.ContainerInstance, error)) {
   go func() {
-    ci, err := WaitUntilContainerInstanceActive(clusterName, ec2InstanceId, ecsSvc)
+    ci, err := WaitUntilContainerInstanceActive(clusterName, ec2InstanceId, sess)
     do(ci, err)
   }()
 }
@@ -279,7 +286,7 @@ func OnContainerInstanceActive(clusterName string, ec2InstanceId string, ecsSvc 
 //
 
 
-// We often need quite a lot of information with a tastk.
+// We often need quite a lot of information with a task.
 // Deep task goes and gets all of it.
 type DeepTask struct {
   Task *ecs.Task
@@ -290,9 +297,9 @@ type DeepTask struct {
 }
 
 // TODO: There are more of these to do ...... 
-func (dtm DeepTask) Uptime() (ut time.Duration, err error) {
+func (dt DeepTask) Uptime() (ut time.Duration, err error) {
   // Panic right away on empty DeepTask
-  start := dtm.Task.StartedAt
+  start := dt.Task.StartedAt
   if start != nil {
     ut = time.Since(*start)
   } else {
@@ -302,24 +309,124 @@ func (dtm DeepTask) Uptime() (ut time.Duration, err error) {
 }
 
 
+// Returns the address of the EC2Instance that the task is running on.
+// This comes from a string pointer in the EC2Instance struct.
+// There is a de-reference in here that could panic if the pointer is nil.
+// This could happen if the task is not yet mapped to a ContainerInstance.
+func (dt DeepTask) PublicIpAddress() (string) {
+  return *dt.EC2Instance.PublicIpAddress
+}
+
+// Returns the host binding to a port.
+func (dt DeepTask) PortHostBinding(containerName string, containerPort int64) (hostPort int64, ok bool) {
+  bindings := dt.NetworkBindings(containerName)
+  for _, binding := range bindings {
+    if containerPort == *binding.ContainerPort {
+      hostPort = *binding.HostPort
+      ok = true
+    }
+  }
+  return hostPort, ok
+}
+
+func (dt DeepTask) NetworkBindings(containerName string ) (bindings []*ecs.NetworkBinding) {
+  // cntrs := dt.T.Containers
+  var container *ecs.Container
+  for _, cntr := range dt.Task.Containers {
+    if containerName == *cntr.Name {
+      container = cntr
+      break
+    }
+  }
+  return container.NetworkBindings
+}
+
+// TODO: Be careful, this impedence match between the aws-sdk and what
+// we return here could prove costly ......
+func (dt DeepTask) GetEnvironment(containerName string) (env map[string]string, err error) {
+  to := dt.Task.Overrides
+  if to == nil { return env, fmt.Errorf("No environment attached to task.")}
+  var kvps []*ecs.KeyValuePair
+  cos := to.ContainerOverrides
+  for _, co := range cos {
+    if *co.Name == containerName {
+      kvps = co.Environment
+      break
+    }
+  }
+  env = keyValuesToMap(kvps)
+  return env, err
+}
+
+
+func getContainerMaps(clusterName string, sess *session.Session) (ciMap ContainerInstanceMap, ec2Map map[string]*ec2.Instance, err error) {
+  // This is ContainerInstance indexed by ContainerInstanceARN
+  ciMap, err = GetAllContainerInstanceDescriptions(clusterName, sess)
+  if err != nil {
+    return ciMap, ec2Map, 
+      fmt.Errorf("Couldn't get the ContainerInstance for the cluster %s: %s", clusterName, err)
+  }
+
+  ec2Svc := ec2.New(sess)
+  ec2Map, err = DescribeEC2Instances(ciMap, ec2Svc)
+  if err != nil {
+    return ciMap, ec2Map, 
+      fmt.Errorf("Couldn't get the EC2 Instances for the cluster %s: %s", clusterName, err)
+  }
+  return ciMap, ec2Map, err
+}
+
+func makeDeepTaskWith(clusterName, taskArn string, dto *ecs.DescribeTasksOutput, sess *session.Session) (dt *DeepTask, err error) {
+
+  // Get ContainerTasks indexed by taskArn. 
+  // It's possible that more than one comes back so we have to deal with that.
+  ctMap := makeCTMapFromDescribeTasksOutput(dto)
+
+  // Let's only use the one based on the taskArn. Any other's we got back we'll ignore.
+  // I hope this doesn't come to bite us (perhaps we'll never get extra's back.)
+  if len(ctMap) > 1 {
+    log.Debug(logrus.Fields{"numberOfTasks": len(ctMap),}, "We got more than one task with our request.")
+  }
+  ct, ok := ctMap[taskArn] 
+  if !ok { return nil, fmt.Errorf("Couldn't find the task for: %s.", taskArn)}
+
+  ciMap, ec2Map, err := getContainerMaps(clusterName, sess)
+
+  // TODO: Refactor this stanza and it's cousing in GetDeepTasks (the DeepTaskMap one.)
+  dt = new(DeepTask)
+  dt.Task = ct.Task
+  dt.Failure = ct.Failure
+  if ct.Task != nil {
+    task := ct.Task 
+    dt.CInstance = ciMap[*task.ContainerInstanceArn].Instance
+    dt.CIFailure = ciMap[*task.ContainerInstanceArn].Failure
+    if dt.CInstance != nil {
+      dt.EC2Instance = ec2Map[*dt.CInstance.Ec2InstanceId]
+    }
+  }
+  if ct.Task == nil && ct.Failure == nil {
+    return dt, fmt.Errorf("Could not find task or failure for %s.", taskArn)
+  }
+  return dt, err
+}
+
+func GetDeepTask(clusterName, taskArn string, sess *session.Session) (dt *DeepTask, err error) {
+  dto, err := GetTaskDescription(clusterName, taskArn, sess)  // ecs.DescribeTasksOutput
+  if err == nil { return dt, fmt.Errorf("Can't get the task for %s:%s: %s", clusterName, taskArn, err)}
+  dt, err = makeDeepTaskWith(clusterName, taskArn, dto, sess)
+  return dt, err
+}
+
 // [TaskArn]DeepTask
 // Getting a collections of deep tasks.
 type DeepTaskMap map[string]*DeepTask
-
-func GetDeepTasks(clusterName string, ecsSvc *ecs.ECS, ec2Svc *ec2.EC2) (dtm DeepTaskMap, err error) {
+func GetDeepTasks(clusterName string, sess *session.Session) (dtm DeepTaskMap, err error) {
+  ecsSvc := ecs.New(sess)
   dtm = make(DeepTaskMap)
   ctMap, err := GetAllTaskDescriptions(clusterName, ecsSvc)
   if err != nil {return dtm, fmt.Errorf("GetDeepTasks: No tasks for cluster \"%s\": %s", clusterName, err)}
 
-  ciMap, err := GetAllContainerInstanceDescriptions(clusterName, ecsSvc)
-  if err != nil {return dtm, fmt.Errorf("GetDeepTasks: No ConatinerInstances for cluster \"%s\": %s", clusterName, err)}
-  if len(ciMap) == 0 {
-    return dtm, fmt.Errorf("GetDeepTasks: There are currently no ContainerInstances on cluster: \"%s\".", clusterName)
-  }
-
-  ec2Map, err := DescribeEC2Instances(ciMap, ec2Svc)
-  if err != nil {return dtm, fmt.Errorf("GetDeepTasks: No EC2 instances for cluster \"%s\": %s", clusterName, err)}
-
+  ciMap, ec2Map, err := getContainerMaps(clusterName, sess)
   for taskArn, ct := range ctMap {
     dt := new(DeepTask)
     dt.Task = ct.Task
@@ -406,6 +513,8 @@ type ContainerTask struct {
   Task *ecs.Task
   Failure *ecs.Failure
 }
+
+// indexed on taskARN
 type ContainerTaskMap map[string]*ContainerTask
 
 
@@ -428,7 +537,8 @@ func GetAllTaskDescriptions(clusterName string, ecs_svc *ecs.ECS) (ContainerTask
   return makeCTMapFromDescribeTasksOutput(resp), err
 }
 
-func GetTaskDescription(clusterName string, taskArn string, ecsSvc *ecs.ECS) (*ecs.DescribeTasksOutput, error) {
+func GetTaskDescription(clusterName string, taskArn string, sess *session.Session) (*ecs.DescribeTasksOutput, error) {
+  ecsSvc := ecs.New(sess)
   params := &ecs.DescribeTasksInput {
     Cluster: aws.String(clusterName),
     Tasks: []*string{aws.String(taskArn)},
@@ -437,6 +547,7 @@ func GetTaskDescription(clusterName string, taskArn string, ecsSvc *ecs.ECS) (*e
   return resp, err
 }
 
+// This just bunches up tasks by taskarn and failures by failure rn.
 func makeCTMapFromDescribeTasksOutput(dto *ecs.DescribeTasksOutput) (ContainerTaskMap) {
   ctMap := make(ContainerTaskMap)
   for _, task := range dto.Tasks {
@@ -502,6 +613,15 @@ func envToKeyValues(env map[string]string) (keyValues []*ecs.KeyValuePair) {
   return keyValues
 }
 
+func keyValuesToMap(kvps []*ecs.KeyValuePair) (env map[string]string) {
+  env = make(map[string]string, len(kvps))
+  for _, kvp := range kvps {
+    env[*kvp.Name] = *kvp.Value
+  }
+  return env
+}
+
+
 func RunTask(clusterName string, taskDef string, ecsSvc *ecs.ECS) (*ecs.RunTaskOutput, error) {
   env := make(ContainerEnvironmentMap)
   resp, err := RunTaskWithEnv(clusterName, taskDef, env, ecsSvc)
@@ -521,17 +641,19 @@ func OnTaskRunning(clusterName, taskDefArn string, ecsSvc *ecs.ECS, do func(*ecs
     }()
 }
 
-func StopTask(clusterName string, taskArn string, ecs_svc *ecs.ECS) (*ecs.StopTaskOutput, error)  {
- params := &ecs.StopTaskInput{
+func StopTask(clusterName string, taskArn string, sess *session.Session) (*ecs.StopTaskOutput, error)  {
+  ecsSvc := ecs.New(sess)
+  params := &ecs.StopTaskInput{
     Task: aws.String(taskArn),
     Cluster: aws.String(clusterName),
   }
-  resp, err := ecs_svc.StopTask(params)
-  return resp, err
+  resp, err := ecsSvc.StopTask(params)
+return resp, err
 }
 
-func OnTaskStopped(clusterName, taskArn string, ecsSvc *ecs.ECS, do func(dto *ecs.DescribeTasksOutput, err error)) {
+func OnTaskStopped(clusterName, taskArn string, sess *session.Session, do func(dto *ecs.DescribeTasksOutput, err error)) {
   go func() {
+    ecsSvc := ecs.New(sess)
     waitParams := &ecs.DescribeTasksInput{
       Cluster: aws.String(clusterName),
       Tasks: []*string{aws.String(taskArn)},
@@ -539,7 +661,7 @@ func OnTaskStopped(clusterName, taskArn string, ecsSvc *ecs.ECS, do func(dto *ec
     err := ecsSvc.WaitUntilTasksStopped(waitParams)
     var dto *ecs.DescribeTasksOutput
     if err == nil {
-      dto, err = GetTaskDescription(clusterName, taskArn, ecsSvc)
+      dto, err = GetTaskDescription(clusterName, taskArn, sess)
     }
     do(dto, err)
   }()
