@@ -61,7 +61,8 @@ func DescribeCluster(clusterName string, svc *ecs.ECS) ([]*ecs.Cluster, error) {
   return resp.Clusters, err
 }
 
-func GetAllClusterDescriptions(ecsSvc *ecs.ECS) ([]*ecs.Cluster, error) {
+// func GetAllClusterDescriptions(ecsSvc *ecs.ECS) ([]*ecs.Cluster, error) {
+func GetAllClusterDescriptions(ecsSvc *ecs.ECS) (Clusters, error) {
 
   clusterArns, err := GetClusters(ecsSvc)
   if err != nil {return make([]*ecs.Cluster, 0), err}
@@ -73,6 +74,51 @@ func GetAllClusterDescriptions(ecsSvc *ecs.ECS) ([]*ecs.Cluster, error) {
   resp, err := ecsSvc.DescribeClusters(params)
   return resp.Clusters, err
 }
+
+
+type Clusters []*ecs.Cluster
+type ClusterSortType int
+const(
+  ByActivity ClusterSortType = iota
+  ByReverseActivity
+)
+
+func (cs Clusters) Sort(t ClusterSortType) {
+  fmt.Printf("Sorting Clusters\n.")
+  switch t  {
+  case ByActivity: sort.Sort(clusterByActivity(cs))
+  case ByReverseActivity: sort.Sort(rClusterByActivity(cs))
+  }
+}
+
+// TODO: This is disgusting. There has to be a better way.
+type clusterByActivity []*ecs.Cluster
+func (cs clusterByActivity) Len() int { return len(cs) }
+func (cs clusterByActivity) Swap(i,j int) { cs[i], cs[j] = cs[j], cs[i] }
+func (cs clusterByActivity) Less (i, j int) bool {
+  if cs[i].Status == nil && cs[j].Status == nil {return *cs[i].ClusterArn < *cs[j].ClusterArn}
+  if (cs[i].Status == nil) { return true}
+  if (cs[j].Status == nil ) { return false }
+
+  if *cs[i].Status != *cs[j].Status { return *cs[i].Status < *cs[j].Status }
+
+  if *cs[i].RunningTasksCount != *cs[j].RunningTasksCount { return *cs[i].RunningTasksCount < *cs[j].RunningTasksCount }
+  return *cs[i].PendingTasksCount < *cs[j].PendingTasksCount
+}
+
+type rClusterByActivity []*ecs.Cluster
+func (cs rClusterByActivity) Len() int { return len(cs) }
+func (cs rClusterByActivity) Swap(i, j int) { cs[i], cs[j] = cs[j], cs[i] }
+func (cs rClusterByActivity) Less (j, i int) bool {
+  if cs[i].Status == nil && cs[j].Status == nil {return *cs[i].ClusterArn < *cs[j].ClusterArn}
+  if (cs[i].Status == nil) { return true}
+  if (cs[j].Status == nil ) { return false }
+  if *cs[i].Status != *cs[j].Status { return *cs[i].Status < *cs[j].Status }
+
+  if *cs[i].RunningTasksCount != *cs[j].RunningTasksCount { return *cs[i].RunningTasksCount < *cs[j].RunningTasksCount }
+  return *cs[i].PendingTasksCount < *cs[j].PendingTasksCount
+}
+
 
 //
 // CONTAINER INSTANCES
@@ -259,8 +305,6 @@ func (dtm DeepTask) Uptime() (ut time.Duration, err error) {
 // [TaskArn]DeepTask
 // Getting a collections of deep tasks.
 type DeepTaskMap map[string]*DeepTask
-
-
 
 func GetDeepTasks(clusterName string, ecsSvc *ecs.ECS, ec2Svc *ec2.EC2) (dtm DeepTaskMap, err error) {
   dtm = make(DeepTaskMap)
