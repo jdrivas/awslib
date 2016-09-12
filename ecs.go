@@ -3,13 +3,14 @@ package awslib
 import (
   "fmt"
   "errors"
+  "io"
   "sort"
   "time"
   "github.com/aws/aws-sdk-go/aws"
+  "github.com/aws/aws-sdk-go/private/protocol/json/jsonutil"
   "github.com/aws/aws-sdk-go/aws/session"
   "github.com/aws/aws-sdk-go/service/ecs"
   "github.com/aws/aws-sdk-go/service/ec2"
-  "github.com/spf13/viper"
   "github.com/Sirupsen/logrus"
 )
 
@@ -731,28 +732,19 @@ func GetTaskDefinition(taskDefinitionArn string, ecs_svc *ecs.ECS) (*ecs.TaskDef
   return resp.TaskDefinition, err
 }
 
-func RegisterTaskDefinition(configFileName string, ecs_svc *ecs.ECS) (*ecs.RegisterTaskDefinitionOutput, error) {
-  config := viper.New()
-  config.SetConfigName(configFileName)
-  config.AddConfigPath(".")
-  err := config.ReadInConfig()
-  if err != nil {
-    fmt.Printf("Couldn't read the config file.\n")
-    return nil, err
-  }
-
+// TODO: This relies on an unsupported JSON unmarshalling interface in the aws go-sdk.
+// This could stop working.
+func RegisterTaskDefinitionWithJSON(json io.Reader, ecs_svc *ecs.ECS) (*ecs.RegisterTaskDefinitionOutput, error) {
   var tdi ecs.RegisterTaskDefinitionInput
-  err = config.Unmarshal(&tdi)
-  if err != nil {
-    fmt.Printf("Couldn't unmarshall the config file.\n")
-    return nil, err
-  }
-  fmt.Printf("Registering Task definition: %+v\n", tdi)
+  err := jsonutil.UnmarshalJSON(&tdi, json)
+  if err != nil { return nil, err}
+  log.Debug(nil, "RegisterTaskDefinition: Decoded JSON stream.")
+
   resp, err := ecs_svc.RegisterTaskDefinition(&tdi)
   if err == nil {
-    fmt.Printf("Task Definnition registered: %+v\n", resp)
-  } 
-  return nil, err
+    log.Debug(nil, "RegisterTaskDefinition: Registered Task.")
+  }
+  return resp, err
 }
 
 func DefaultTaskDefinition() (ecs.RegisterTaskDefinitionInput) {
