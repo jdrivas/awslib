@@ -13,7 +13,6 @@ import (
   "github.com/Sirupsen/logrus"
 )
 
-
 //
 // CLUSTERS
 //
@@ -247,6 +246,11 @@ func TerminateContainerInstance(clusterName string, containerArn string, ecs_svc
   return resp, err
 }
 
+// TODP: This needs to match on long and short InstanceIDs.
+// It looks like you can constructed an instnceARN like this:
+// arn:aws:ecs:us-east-1:033441544097:container-instance/6cf583b2-b09d-42e9-af5e-c2502271e372
+// arn:aws:ecs:<region>:<accoount-id>:container-instance/<short-arn>
+// Should be obtainable from sess.
 func getInstanceId(containerInstances []*ecs.ContainerInstance, containerArn string) (instanceId *string) {
   for _, instance := range containerInstances {
     if *instance.ContainerInstanceArn == containerArn {
@@ -296,9 +300,16 @@ type DeepTask struct {
   EC2Instance *ec2.Instance
 }
 
+
 // TODO: There are more of these to do ...... 
+
+func (dt DeepTask) UptimeString() (string) {
+  if dt.Task.StartedAt == nil { return "--"}
+  uptime, _ := dt.Uptime()
+  return ShortDurationString(uptime)
+}
+
 func (dt DeepTask) Uptime() (ut time.Duration, err error) {
-  // Panic right away on empty DeepTask
   start := dt.Task.StartedAt
   if start != nil {
     ut = time.Since(*start)
@@ -308,6 +319,17 @@ func (dt DeepTask) Uptime() (ut time.Duration, err error) {
   return ut, err
 }
 
+func (dt DeepTask) TimeToStartString() (string) {
+  if dt.Task.StartedAt == nil { return "--" }
+  return ShortDurationString(dt.TimeToStart())
+}
+
+// TODO: decide if returning 0 or err is better.
+func (dt DeepTask) TimeToStart() (time.Duration) {
+  t := dt.Task 
+  if t.StartedAt == nil || t.CreatedAt == nil {return 0 * time.Second}
+  return t.StartedAt.Sub(*t.CreatedAt)
+}
 
 // Returns the address of the EC2Instance that the task is running on.
 // This comes from a string pointer in the EC2Instance struct.
@@ -359,7 +381,7 @@ func (dt DeepTask) GetEnvironment(containerName string) (env map[string]string, 
 }
 
 
-func getContainerMaps(clusterName string, sess *session.Session) (ciMap ContainerInstanceMap, ec2Map map[string]*ec2.Instance, err error) {
+func GetContainerMaps(clusterName string, sess *session.Session) (ciMap ContainerInstanceMap, ec2Map map[string]*ec2.Instance, err error) {
   // This is ContainerInstance indexed by ContainerInstanceARN
   ciMap, err = GetAllContainerInstanceDescriptions(clusterName, sess)
   if err != nil {
@@ -389,7 +411,7 @@ func makeDeepTaskWith(clusterName, taskArn string, dto *ecs.DescribeTasksOutput,
   ct, ok := ctMap[taskArn] 
   if !ok { return nil, fmt.Errorf("Couldn't find the task for: %s.", taskArn)}
 
-  ciMap, ec2Map, err := getContainerMaps(clusterName, sess)
+  ciMap, ec2Map, err := GetContainerMaps(clusterName, sess)
 
   // TODO: Refactor this stanza and it's cousing in GetDeepTasks (the DeepTaskMap one.)
   dt = new(DeepTask)
@@ -411,21 +433,22 @@ func makeDeepTaskWith(clusterName, taskArn string, dto *ecs.DescribeTasksOutput,
 
 func GetDeepTask(clusterName, taskArn string, sess *session.Session) (dt *DeepTask, err error) {
   dto, err := GetTaskDescription(clusterName, taskArn, sess)  // ecs.DescribeTasksOutput
-  if err == nil { return dt, fmt.Errorf("Can't get the task for %s:%s: %s", clusterName, taskArn, err)}
+  if err != nil { return dt, fmt.Errorf("GetDeepTask: failed to get description for %s:%s: %s", clusterName, taskArn, err)}
   dt, err = makeDeepTaskWith(clusterName, taskArn, dto, sess)
   return dt, err
 }
 
-// [TaskArn]DeepTask
-// Getting a collections of deep tasks.
+// [TaskArn]DeepTask. 
+// A collections of deep tasks indexed by TaskArn.
 type DeepTaskMap map[string]*DeepTask
+
 func GetDeepTasks(clusterName string, sess *session.Session) (dtm DeepTaskMap, err error) {
   ecsSvc := ecs.New(sess)
   dtm = make(DeepTaskMap)
   ctMap, err := GetAllTaskDescriptions(clusterName, ecsSvc)
   if err != nil {return dtm, fmt.Errorf("GetDeepTasks: No tasks for cluster \"%s\": %s", clusterName, err)}
 
-  ciMap, ec2Map, err := getContainerMaps(clusterName, sess)
+  ciMap, ec2Map, err := GetContainerMaps(clusterName, sess)
   for taskArn, ct := range ctMap {
     dt := new(DeepTask)
     dt.Task = ct.Task
@@ -511,6 +534,27 @@ func ListTasksForCluster(clusterName string, ecs_svc *ecs.ECS) ([]*string, error
 type ContainerTask struct {
   Task *ecs.Task
   Failure *ecs.Failure
+}
+
+func (ct *ContainerTask) UptimeString() (string) {
+  return ShortDurationString(ct.Uptime())
+}
+
+// This is since created as opposed to started.
+// TODO: Consider StartedAt vs CreatedAt
+func (ct *ContainerTask) Uptime() (time.Duration) {
+  return time.Since(*ct.Task.CreatedAt)
+}
+
+func (ct *ContainerTask) TimeToStartString() (string) {
+  return ShortDurationString(ct.TimeToStart())
+}
+
+func (ct *ContainerTask) TimeToStart() (time.Duration) {
+  if ct.Task.StartedAt == nil || ct.Task.CreatedAt == nil {
+    return 0 * time.Second
+  }
+  return ct.Task.StartedAt.Sub(*ct.Task.CreatedAt)
 }
 
 // indexed on taskARN
@@ -666,6 +710,11 @@ func OnTaskStopped(clusterName, taskArn string, sess *session.Session, do func(d
   }()
 }
 
+
+//
+// Task Definitions
+//
+
 func ListTaskDefinitions(ecs_svc *ecs.ECS) ([]*string, error) {
   params := &ecs.ListTaskDefinitionsInput{
     MaxResults: aws.Int64(100),
@@ -673,10 +722,6 @@ func ListTaskDefinitions(ecs_svc *ecs.ECS) ([]*string, error) {
   resp, err := ecs_svc.ListTaskDefinitions(params)
   return resp.TaskDefinitionArns, err
 }
-
-//
-// Task Definitions
-//
 
 func GetTaskDefinition(taskDefinitionArn string, ecs_svc *ecs.ECS) (*ecs.TaskDefinition, error) {
   params := &ecs.DescribeTaskDefinitionInput {

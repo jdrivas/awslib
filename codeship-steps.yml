@@ -1,0 +1,7 @@
+minecraft-no-tools:
+  build:
+    image: minecraft-no-tools
+    path : artifiacts
+    dockerfile_path: Dockerfile
+    
+

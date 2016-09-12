@@ -14,6 +14,11 @@ import (
 
 // Returns a map of *ec2.Instance keyed on the associated InstanceId.
 func DescribeEC2Instances(ciMap ContainerInstanceMap, sess *session.Session) (map[string]*ec2.Instance, error) {
+  if instanceIds := ciMap.GetEc2InstanceIds(); len(instanceIds) == 0 {
+    instances := make(map[string]*ec2.Instance, 0)
+    return instances, nil
+  }
+
   ec2_svc := ec2.New(sess)
   params := &ec2.DescribeInstancesInput {
     DryRun: aws.Bool(false),
