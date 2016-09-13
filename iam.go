@@ -14,10 +14,12 @@ import (
   "github.com/aws/aws-sdk-go/aws/defaults"
   "github.com/aws/aws-sdk-go/aws/session"
   "github.com/aws/aws-sdk-go/service/iam"
+  "github.com/aws/aws-sdk-go/service/sts"
   "github.com/Sirupsen/logrus"
 )
 
-
+// If you leave either of these blank you get the default.
+// You can leave configFile blank and it will go look in the usual places (e.g. ~/.aws/config)
 func GetSession(profile, configFile string) (*session.Session, error) {
   s, err := session.NewSessionWithOptions(session.Options{
     Profile: profile,
@@ -121,4 +123,15 @@ func AccountDetailsString(config *aws.Config) (details string, err error) {
   }
   details += fmt.Sprintf(" Region: %s", *config.Region)
   return details, err
+}
+
+// Returns the AWS Account Number of the caller.
+// It's slightly goofy that we use the SercureTokenService to do this, but ....
+func GetCurrentAccountNumber(sess *session.Session) (an string, err error) {
+  stsSvc := sts.New(sess)
+  resp, err := stsSvc.GetCallerIdentity(&sts.GetCallerIdentityInput{})
+  if err == nil {
+    an = *resp.Account
+  } 
+  return an, err
 }
