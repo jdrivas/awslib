@@ -85,7 +85,7 @@ const(
 )
 
 func (cs Clusters) Sort(t ClusterSortType) {
-  fmt.Printf("Sorting Clusters\n.")
+  // fmt.Printf("Sorting Clusters.\n)
   switch t  {
   case ByActivity: sort.Sort(clusterByActivity(cs))
   case ByReverseActivity: sort.Sort(rClusterByActivity(cs))
