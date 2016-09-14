@@ -149,6 +149,8 @@ type ContainerInstance struct {
 // Keyed on ConatinerInstanceArn or Ec2InstanceId
 type ContainerInstanceMap map[string]*ContainerInstance
 
+
+
 func GetAllContainerInstanceDescriptions(clusterName string, sess *session.Session) (ContainerInstanceMap, error) {
 
   instanceArns, err := GetContainerInstances(clusterName, sess)
@@ -176,6 +178,8 @@ func GetContainerInstanceDescription(clusterName string, containerArn string, se
   resp, err := ecsSvc.DescribeContainerInstances(params)
   return makeCIMapFromDescribeContainerInstancesOutput(resp), err
 }
+
+
 
 //Returns a map keyed on ContainerInstanceArns
 func makeCIMapFromDescribeContainerInstancesOutput(dcio *ecs.DescribeContainerInstancesOutput) (ContainerInstanceMap) {
@@ -221,6 +225,23 @@ func (ciMap ContainerInstanceMap) GetEc2InstanceMap() (ContainerInstanceMap) {
     if ci.Instance != nil {ec2Map[*ci.Instance.Ec2InstanceId] = ci}
   }
   return ec2Map
+}
+
+// Returns both the CotnainerInstanceMap (cis index by ciArn) and the ec2version ec2Is on ec2ID (not arn)
+func GetContainerMaps(clusterName string, sess *session.Session) (ciMap ContainerInstanceMap, ec2Map map[string]*ec2.Instance, err error) {
+  // This is ContainerInstance indexed by ContainerInstanceARN
+  ciMap, err = GetAllContainerInstanceDescriptions(clusterName, sess)
+  if err != nil {
+    return ciMap, ec2Map, 
+      fmt.Errorf("Couldn't get the ContainerInstance for the cluster %s: %s", clusterName, err)
+  }
+
+  ec2Map, err = DescribeEC2Instances(ciMap, sess)
+  if err != nil {
+    return ciMap, ec2Map, 
+      fmt.Errorf("Couldn't get the EC2 Instances for the cluster %s: %s", clusterName, err)
+  }
+  return ciMap, ec2Map, err
 }
 
 func TerminateContainerInstance(clusterName string, containerArn string, ecs_svc *ecs.ECS, ec2Svc *ec2.EC2) (resp *ec2.TerminateInstancesOutput, err error) {
@@ -301,6 +322,12 @@ type DeepTask struct {
   EC2Instance *ec2.Instance
 }
 
+func GetDeepTask(clusterName, taskArn string, sess *session.Session) (dt *DeepTask, err error) {
+  dto, err := GetTaskDescription(clusterName, taskArn, sess)  // ecs.DescribeTasksOutput
+  if err != nil { return dt, fmt.Errorf("GetDeepTask: failed to get description for %s:%s: %s", clusterName, taskArn, err)}
+  dt, err = makeDeepTaskWith(clusterName, taskArn, dto, sess)
+  return dt, err
+}
 
 // TODO: There are more of these to do ...... 
 
@@ -338,6 +365,10 @@ func (dt DeepTask) TimeToStart() (time.Duration) {
 // This could happen if the task is not yet mapped to a ContainerInstance.
 func (dt DeepTask) PublicIpAddress() (string) {
   return *dt.EC2Instance.PublicIpAddress
+}
+
+func (dt DeepTask) PrivateIpAddress() (string) {
+  return *dt.EC2Instance.PrivateIpAddress
 }
 
 // Returns the host binding to a port.
@@ -382,22 +413,6 @@ func (dt DeepTask) GetEnvironment(containerName string) (env map[string]string, 
 }
 
 
-func GetContainerMaps(clusterName string, sess *session.Session) (ciMap ContainerInstanceMap, ec2Map map[string]*ec2.Instance, err error) {
-  // This is ContainerInstance indexed by ContainerInstanceARN
-  ciMap, err = GetAllContainerInstanceDescriptions(clusterName, sess)
-  if err != nil {
-    return ciMap, ec2Map, 
-      fmt.Errorf("Couldn't get the ContainerInstance for the cluster %s: %s", clusterName, err)
-  }
-
-  ec2Map, err = DescribeEC2Instances(ciMap, sess)
-  if err != nil {
-    return ciMap, ec2Map, 
-      fmt.Errorf("Couldn't get the EC2 Instances for the cluster %s: %s", clusterName, err)
-  }
-  return ciMap, ec2Map, err
-}
-
 func makeDeepTaskWith(clusterName, taskArn string, dto *ecs.DescribeTasksOutput, sess *session.Session) (dt *DeepTask, err error) {
 
   // Get ContainerTasks indexed by taskArn. 
@@ -432,12 +447,6 @@ func makeDeepTaskWith(clusterName, taskArn string, dto *ecs.DescribeTasksOutput,
   return dt, err
 }
 
-func GetDeepTask(clusterName, taskArn string, sess *session.Session) (dt *DeepTask, err error) {
-  dto, err := GetTaskDescription(clusterName, taskArn, sess)  // ecs.DescribeTasksOutput
-  if err != nil { return dt, fmt.Errorf("GetDeepTask: failed to get description for %s:%s: %s", clusterName, taskArn, err)}
-  dt, err = makeDeepTaskWith(clusterName, taskArn, dto, sess)
-  return dt, err
-}
 
 // [TaskArn]DeepTask. 
 // A collections of deep tasks indexed by TaskArn.
@@ -616,7 +625,7 @@ func makeCTMapFromDescribeTasksOutput(dto *ecs.DescribeTasksOutput) (ContainerTa
 // ContainerName -> [Key]Value
 type ContainerEnvironmentMap map[string]map[string]string
 
-func RunTaskWithEnv(clusterName string, taskDefArn string, envMap ContainerEnvironmentMap, ecsSvc *ecs.ECS) (*ecs.RunTaskOutput, error) {
+func RunTaskWithEnv(clusterName string, taskDefArn string, envMap ContainerEnvironmentMap, sess *session.Session) (*ecs.RunTaskOutput, error) {
   to := envMap.ToTaskOverride()
   params := &ecs.RunTaskInput{
     TaskDefinition: aws.String(taskDefArn),
@@ -624,6 +633,7 @@ func RunTaskWithEnv(clusterName string, taskDefArn string, envMap ContainerEnvir
     Count: aws.Int64(1),
     Overrides: &to,
   }
+  ecsSvc := ecs.New(sess)
   resp, err := ecsSvc.RunTask(params)
   if err != nil {err = fmt.Errorf("RunTaskWithEnv %s %s:  %s", clusterName, taskDefArn, err)}
 
@@ -666,18 +676,20 @@ func keyValuesToMap(kvps []*ecs.KeyValuePair) (env map[string]string) {
 }
 
 
-func RunTask(clusterName string, taskDef string, ecsSvc *ecs.ECS) (*ecs.RunTaskOutput, error) {
+func RunTask(clusterName string, taskDef string, sess *session.Session) (*ecs.RunTaskOutput, error) {
   env := make(ContainerEnvironmentMap)
-  resp, err := RunTaskWithEnv(clusterName, taskDef, env, ecsSvc)
+  resp, err := RunTaskWithEnv(clusterName, taskDef, env, sess)
   return resp, err
 }
 
-func OnTaskRunning(clusterName, taskDefArn string, ecsSvc *ecs.ECS, do func(*ecs.DescribeTasksOutput, error)) {
+// Should consider returning DTMs for this.
+func OnTaskRunning(clusterName, taskDefArn string, sess *session.Session, do func(*ecs.DescribeTasksOutput, error)) {
     go func() {
       task_params := &ecs.DescribeTasksInput{
         Cluster: aws.String(clusterName),
         Tasks: []*string{aws.String(taskDefArn)},
       }
+      ecsSvc := ecs.New(sess)
       err := ecsSvc.WaitUntilTasksRunning(task_params)
       td, newErr := ecsSvc.DescribeTasks(task_params)
       if err == nil { err = newErr }
@@ -716,6 +728,21 @@ func OnTaskStopped(clusterName, taskArn string, sess *session.Session, do func(d
 // Task Definitions
 //
 
+// Lists ACTIVE families of Task Definitions.
+func ListTaskDefinitionFamilies(sess *session.Session) ([]*string, error) {
+  ecsSvc := ecs.New(sess)
+  params := &ecs.ListTaskDefinitionFamiliesInput{
+    Status: aws.String("ACTIVE"),
+  }
+  results := make([]*string,0)
+  err := ecsSvc.ListTaskDefinitionFamiliesPages(params,
+    func(p *ecs.ListTaskDefinitionFamiliesOutput, lastPage bool) (bool) {
+      results = append(results, p.Families...)
+      return lastPage
+  })
+  return results, err
+}
+
 func ListTaskDefinitions(ecs_svc *ecs.ECS) ([]*string, error) {
   params := &ecs.ListTaskDefinitionsInput{
     MaxResults: aws.Int64(100),
@@ -724,23 +751,26 @@ func ListTaskDefinitions(ecs_svc *ecs.ECS) ([]*string, error) {
   return resp.TaskDefinitionArns, err
 }
 
-func GetTaskDefinition(taskDefinitionArn string, ecs_svc *ecs.ECS) (*ecs.TaskDefinition, error) {
+// func GetTaskDefinition(taskDefinitionArn string, ecs_svc *ecs.ECS) (*ecs.TaskDefinition, error) {
+func GetTaskDefinition(taskDefinitionArn string, sess *session.Session) (*ecs.TaskDefinition, error) {
+  ecsSvc := ecs.New(sess)
   params := &ecs.DescribeTaskDefinitionInput {
     TaskDefinition: aws.String(taskDefinitionArn),
   }
-  resp, err := ecs_svc.DescribeTaskDefinition(params)
+  resp, err := ecsSvc.DescribeTaskDefinition(params)
   return resp.TaskDefinition, err
 }
 
 // TODO: This relies on an unsupported JSON unmarshalling interface in the aws go-sdk.
 // This could stop working.
-func RegisterTaskDefinitionWithJSON(json io.Reader, ecs_svc *ecs.ECS) (*ecs.RegisterTaskDefinitionOutput, error) {
+func RegisterTaskDefinitionWithJSON(json io.Reader, sess *session.Session) (*ecs.RegisterTaskDefinitionOutput, error) {
   var tdi ecs.RegisterTaskDefinitionInput
   err := jsonutil.UnmarshalJSON(&tdi, json)
   if err != nil { return nil, err}
   log.Debug(nil, "RegisterTaskDefinition: Decoded JSON stream.")
 
-  resp, err := ecs_svc.RegisterTaskDefinition(&tdi)
+  ecsSvc := ecs.New(sess)
+  resp, err := ecsSvc.RegisterTaskDefinition(&tdi)
   if err == nil {
     log.Debug(nil, "RegisterTaskDefinition: Registered Task.")
   }
