@@ -2,7 +2,9 @@ package awslib
 
 import(
   "fmt"
+  "strings"
   "time"
+  "github.com/aws/aws-sdk-go/service/ecs"
 )
 
 
@@ -25,5 +27,27 @@ func ShortDurationString(d time.Duration) (s string) {
   // Days != 0.
   return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
 
+  return s
+}
+
+func CollectContainerNames(containers []*ecs.Container) (string) {
+  s := ""
+  for _, container := range containers {
+    s += fmt.Sprintf("%s ", *container.Name)
+  }
+  return strings.Trim(s, ",")
+}
+
+func CollectBindings(task *ecs.Task) (string) {
+  s := ""
+  for _, c := range task.Containers {
+    bdgs := c.NetworkBindings
+    if len(bdgs) == 0 {continue}
+    s += *c.Name + ": "
+    for _, b := range bdgs {
+      s += fmt.Sprintf("%d->%d, ", *b.ContainerPort, *b.HostPort)
+    }
+    s = strings.Trim(s,", ")
+  }
   return s
 }
