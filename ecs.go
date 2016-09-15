@@ -5,6 +5,7 @@ import (
   "errors"
   "io"
   "sort"
+  "strconv"
   "time"
   "github.com/aws/aws-sdk-go/aws"
   "github.com/aws/aws-sdk-go/private/protocol/json/jsonutil"
@@ -207,6 +208,14 @@ func makeCIMapFromDescribeContainerInstancesOutput(dcio *ecs.DescribeContainerIn
   return ciMap
 }
 
+func (ciMap ContainerInstanceMap) InstanceCount() (int) {
+  count := 0
+  for _, ci := range ciMap {
+    if ci.Instance != nil {count++}
+  }
+  return count
+}
+
 func (ciMap ContainerInstanceMap) GetEc2InstanceIds() ([]*string) {
   ids := []*string{}
   for _, ci := range ciMap {
@@ -225,6 +234,110 @@ func (ciMap ContainerInstanceMap) GetEc2InstanceMap() (ContainerInstanceMap) {
   }
   return ec2Map
 }
+
+// Collect up the resources in the containers and return the totals.
+func (ciMap ContainerInstanceMap) Totals() (r InstanceResource) {
+  rg := make([]*ecs.Resource, 0)
+  rm := make([]*ecs.Resource, 0)
+  pt := int64(0)
+  rt := int64(0)
+  for _, ci := range ciMap {
+    if ci.Instance != nil {
+      i := ci.Instance
+      rg = append(rg, i.RegisteredResources...)
+      rm = append(rm, i.RemainingResources...)
+      pt += *i.PendingTasksCount
+      rt += *i.RunningTasksCount
+    }
+  }
+  r = InstanceResource{
+    Registered: collectResources(rg),
+    Remaining: collectResources(rm),
+    PendingTasks: pt,
+    RunningTasks: rt,
+  }
+  return r
+}
+
+// Keyed on resource type.
+type ResourceMap map[string]*ecs.Resource
+
+// Might be better to consider hashes (on name) for the resource collecitons
+type InstanceResource struct {
+  Registered ResourceMap
+  Remaining ResourceMap
+  PendingTasks int64
+  RunningTasks int64
+}
+
+func collectResources(rs []*ecs.Resource) (ResourceMap) {
+  // cs := make([]*ecs.Resource, 0)
+
+  // csMap := make(map[string]*ecs.Resource,0)
+  csMap := make(ResourceMap, 0)
+  for _, r := range rs {
+    // Check to see if we already have the resource ...
+    newr, ok := csMap[*r.Name]
+    if !ok { // ... no, create a new one.
+      newr = new(ecs.Resource)
+      csMap[*r.Name] = newr
+      newr.Name = r.Name
+      newr.Type = r.Type
+      switch *r.Type {
+      case "INTEGER":
+        newr.IntegerValue = new(int64)
+      case "LONG": 
+        newr.LongValue = new(int64)
+      case "DOUBLE": 
+        newr.DoubleValue = new(float64)
+      case "STRINGSET": 
+        newr.StringSetValue = make([]*string, 0, len(r.StringSetValue))
+      }
+    }
+
+    // ... once we have the resource, add the new value to the old.
+    switch *r.Type {
+    case "INTEGER":
+      *newr.IntegerValue += *r.IntegerValue
+    case "LONG": 
+      *newr.LongValue += *r.LongValue
+    case "DOUBLE": 
+      *newr.DoubleValue +=  *r.DoubleValue
+    case "STRINGSET":
+      newr.StringSetValue = append(newr.StringSetValue, r.StringSetValue...)
+    }
+  }
+
+  // for _, r := range csMap {
+  //   cs = append(cs, r)
+  // }
+  return csMap
+}
+
+// Returns the string representation of the value.
+func (rm ResourceMap) StringFor(resourceName string) (v string) {
+  v = "--"
+  if r, ok := rm[resourceName]; ok {
+    v = getValueString(r)
+  }
+  return v
+}
+
+// TODO: Should add a gather flag for totaling values in StringSet.
+// e,g. ["1", "2", "3", "2", "1", "4"] => "1:2, 2:2, 3:1, 4:1" or something.
+func getValueString(r *ecs.Resource) (v string) {
+    switch *r.Type {
+    case "INTEGER", "LONG": 
+      v = strconv.FormatInt(*r.IntegerValue,10)
+    case "DOUBLE": 
+      v = strconv.FormatFloat(*r.DoubleValue, 'g', 2, 64)
+    case "STRINGSET":
+      v = JoinStringP(r.StringSetValue, ",")
+  }
+  return v
+}
+
+
 
 // Returns both the CotnainerInstanceMap (cis index by ciArn) and the ec2version ec2Is on ec2ID (not arn)
 func GetContainerMaps(clusterName string, sess *session.Session) (ciMap ContainerInstanceMap, ec2Map map[string]*ec2.Instance, err error) {

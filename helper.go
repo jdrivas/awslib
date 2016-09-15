@@ -7,6 +7,14 @@ import(
   "github.com/aws/aws-sdk-go/service/ecs"
 )
 
+// Sigh.
+func JoinStringP(sp []*string, sep string) (v string) {
+  s := make([]string, len(sp))
+  for i, p := range sp {
+    s[i] = *p
+  }
+  return strings.Join(s, sep)
+}
 
 func ShortDurationString(d time.Duration) (s string) {
   days := int(d.Hours()) / 24
