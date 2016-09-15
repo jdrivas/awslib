@@ -180,7 +180,6 @@ func GetContainerInstanceDescription(clusterName string, containerArn string, se
 }
 
 
-
 //Returns a map keyed on ContainerInstanceArns
 func makeCIMapFromDescribeContainerInstancesOutput(dcio *ecs.DescribeContainerInstancesOutput) (ContainerInstanceMap) {
 
@@ -347,6 +346,14 @@ func (dt DeepTask) Uptime() (ut time.Duration, err error) {
   return ut, err
 }
 
+func(dt DeepTask) LastStatus() (string) {
+  s := "<unavailable>"
+  if dt.Task.LastStatus != nil {
+    s = *dt.Task.LastStatus
+  }
+  return s
+}
+
 func (dt DeepTask) TimeToStartString() (string) {
   if dt.Task.StartedAt == nil { return "--" }
   return ShortDurationString(dt.TimeToStart())
@@ -383,6 +390,10 @@ func (dt DeepTask) PortHostBinding(containerName string, containerPort int64) (h
   return hostPort, ok
 }
 
+func (dt DeepTask) ContainerNamesString() (string) {
+  return CollectContainerNames(dt.Task.Containers)
+}
+
 func (dt DeepTask) NetworkBindings(containerName string ) (bindings []*ecs.NetworkBinding) {
   // cntrs := dt.T.Containers
   var container *ecs.Container
@@ -397,19 +408,20 @@ func (dt DeepTask) NetworkBindings(containerName string ) (bindings []*ecs.Netwo
 
 // TODO: Be careful, this impedence match between the aws-sdk and what
 // we return here could prove costly ......
-func (dt DeepTask) GetEnvironment(containerName string) (env map[string]string, err error) {
+func (dt DeepTask) GetEnvironment(containerName string) (env map[string]string, ok bool) {
   to := dt.Task.Overrides
-  if to == nil { return env, fmt.Errorf("No environment attached to task.")}
+  if to == nil { return env, false }
   var kvps []*ecs.KeyValuePair
   cos := to.ContainerOverrides
   for _, co := range cos {
     if *co.Name == containerName {
       kvps = co.Environment
+      ok = true
       break
     }
   }
   env = keyValuesToMap(kvps)
-  return env, err
+  return env, ok
 }
 
 
