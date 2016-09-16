@@ -150,8 +150,6 @@ type ContainerInstance struct {
 // Keyed on ConatinerInstanceArn or Ec2InstanceId
 type ContainerInstanceMap map[string]*ContainerInstance
 
-
-
 func GetAllContainerInstanceDescriptions(clusterName string, sess *session.Session) (ContainerInstanceMap, error) {
 
   instanceArns, err := GetContainerInstances(clusterName, sess)
@@ -226,7 +224,7 @@ func (ciMap ContainerInstanceMap) GetEc2InstanceIds() ([]*string) {
   return ids
 }
 
-// Returns a map keyed on EC2InstanceIds (note: thre will be no failures.)
+// Returns a map keyed on EC2InstanceIds
 func (ciMap ContainerInstanceMap) GetEc2InstanceMap() (ContainerInstanceMap) {
   ec2Map := make(ContainerInstanceMap)
   for _, ci := range ciMap {
@@ -434,6 +432,7 @@ type DeepTask struct {
   EC2Instance *ec2.Instance
 }
 
+// this is expensive. It makes 4 calls to AWS to get information.
 func GetDeepTask(clusterName, taskArn string, sess *session.Session) (dt *DeepTask, err error) {
   dto, err := GetTaskDescription(clusterName, taskArn, sess)  // ecs.DescribeTasksOutput
   if err != nil { return dt, fmt.Errorf("GetDeepTask: failed to get description for %s:%s: %s", clusterName, taskArn, err)}
@@ -491,6 +490,10 @@ func (dt DeepTask) PrivateIpAddress() (string) {
   return *dt.EC2Instance.PrivateIpAddress
 }
 
+func (dt DeepTask) GetInstanceID() (*string) {
+  return dt.EC2Instance.InstanceId
+}
+
 // Returns the host binding to a port.
 func (dt DeepTask) PortHostBinding(containerName string, containerPort int64) (hostPort int64, ok bool) {
   bindings := dt.NetworkBindings(containerName)
@@ -517,6 +520,12 @@ func (dt DeepTask) NetworkBindings(containerName string ) (bindings []*ecs.Netwo
     }
   }
   return container.NetworkBindings
+}
+
+// Returns the short verison of the ClusterARN from the task.
+func (dt DeepTask) ClusterName() (cn string) {
+  if dt.Task == nil {return "<no-cluster>"}
+  return ShortArnString(dt.Task.ClusterArn)
 }
 
 // TODO: Be careful, this impedence match between the aws-sdk and what
