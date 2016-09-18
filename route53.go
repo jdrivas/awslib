@@ -79,5 +79,17 @@ func getZoneString(fqdn string) (string, bool) {
   return dn[l-2] + "." + dn[l-1], true
 }
 
-
+func OnDNSChangeSynched(changeId *string, sess *session.Session, 
+  do func(*route53.ChangeInfo, error)) {
+  go func() {
+    r53Svc := route53.New(sess)
+    param := &route53.GetChangeInput{
+      Id: changeId,
+    }
+    err := r53Svc.WaitUntilResourceRecordSetsChanged(param)
+    resp, err2 := r53Svc.GetChange(param)
+    if err == nil { err = err2}
+    do(resp.ChangeInfo, err)
+  }()
+}
 
