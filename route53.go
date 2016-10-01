@@ -42,6 +42,37 @@ func AttachIpToDNS(ip, fqdn, comment string, ttl int64, sess *session.Session) (
   return resp.ChangeInfo, err
 }
 
+// This deletes the DNS record for 
+func DetachFromDNS(ip, fqdn, comment string, ttl int64, sess *session.Session) (*route53.ChangeInfo, error) {
+
+  zone, err := GetHostedZone(fqdn, sess)
+  if err != nil { return nil, err }
+
+  newaddr := strings.ToLower(fqdn) + "."
+  r53Svc := route53.New(sess)
+  params := &route53.ChangeResourceRecordSetsInput{
+    HostedZoneId: zone.Id,
+    ChangeBatch: &route53.ChangeBatch{
+      Comment: aws.String(comment),
+      Changes: []*route53.Change{
+        {
+          Action: aws.String("DELETE"),
+          ResourceRecordSet: &route53.ResourceRecordSet{
+            Name: aws.String(newaddr),
+            Type: aws.String("A"),
+            ResourceRecords: []*route53.ResourceRecord{
+              { Value: aws.String(ip) },
+            },
+            TTL: aws.Int64(ttl),
+          },
+        },
+      },
+    },
+  }
+  resp, err := r53Svc.ChangeResourceRecordSets(params)
+  return resp.ChangeInfo, err
+}
+
 // Get the hosted zone for the fqdn
 func GetHostedZone(fqdn string, sess *session.Session) (*route53.HostedZone, error) {
 

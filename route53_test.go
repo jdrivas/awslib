@@ -29,3 +29,15 @@ func TestGetZoneString(t *testing.T) {
     assert.False(t, ok, "Returned %s for: %s", res, ts)
   }
 }
+
+const testIP = "127.0.0.1"
+const testFQDN = "unit-test.test.momentlabs.io"
+func TestDNSAttachDetach(t *testing.T) {
+  skipOnShort(t)
+  s := getSession()
+  _, err := AttachIpToDNS(testIP, testFQDN, "Testing add a record with awslib.", 60, s)
+  assert.NoError(t, err, "Failed to update DNS with a record entry.")
+
+  _, err = DetachFromDNS(testIP, testFQDN, "Testing removing a record with awslib.", 60,  s)
+  assert.NoError(t, err, "Failed to remove the DNS record entry.")
+}

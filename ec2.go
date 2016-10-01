@@ -277,7 +277,7 @@ func getInstanceConfig() (accessKeyId, secretAccessKey, region string, err error
   // creds, err := credentials.NewSharedCredentials(credFile,credProfile).Get()
   configFile := awslibConfig[InstConfigFileKey]
   configProfile := awslibConfig[InstConfigProfileKey]
-  session, err := GetSession(configProfile, configFile)
+  session, err := GetSession(configProfile)
   region = *session.Config.Region
   log.Debug(logrus.Fields{
     "file": configFile, 

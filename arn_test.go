@@ -14,7 +14,7 @@ func makeLongArn(prefix, region, an, typeString, shortArn string) (string) {
 func TestGetLongArnString(t *testing.T) {
   skipOnShort(t)
 
-  sess, err := GetSession("momentlabs-test","")
+  sess, err := GetSession("momentlabs-test")
   if err != nil { assert.FailNow(t, "Error attempting to get AWS session: %s", err) }
   region := sess.Config.Region
   if region == nil || *region == "" { assert.FailNow(t, "Failed to get region from configuraiton.") }

@@ -19,8 +19,7 @@ import (
 )
 
 // If you leave either of these blank you get the default.
-// You can leave configFile blank and it will go look in the usual places (e.g. ~/.aws/config)
-func GetSession(profile, configFile string) (*session.Session, error) {
+func GetSession(profile string) (*session.Session, error) {
   s, err := session.NewSessionWithOptions(session.Options{
     Profile: profile,
     SharedConfigState: session.SharedConfigEnable,
@@ -40,8 +39,6 @@ func GetSession(profile, configFile string) (*session.Session, error) {
 // Look for credentials in a credential file provide by the credFile argument.
 // If that string is "", look in ~/.aws/.credentials
 // If there is no cred file then check the environment.
-
-
 func GetConfig(profile string, credFile string) (*aws.Config) {
   config := defaults.Get().Config
 
@@ -134,4 +131,12 @@ func GetCurrentAccountNumber(sess *session.Session) (an string, err error) {
     an = *resp.Account
   } 
   return an, err
+}
+
+
+func GetCurrentAccountIdentity(sess *session.Session) ( *sts.GetCallerIdentityOutput, error ) {
+
+  stsSvc := sts.New(sess)
+  resp, err := stsSvc.GetCallerIdentity(&sts.GetCallerIdentityInput{})
+  return resp, err  
 }
