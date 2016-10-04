@@ -6,6 +6,8 @@ import (
   "github.com/aws/aws-sdk-go/aws/session"
 )
 
+
+// TODO: Fix this for more general use.
 func ShortArnString(arn *string) (s string) {
   if arn == nil {
     return "<nil>"

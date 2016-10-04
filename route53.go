@@ -7,6 +7,7 @@ import(
   "github.com/aws/aws-sdk-go/aws/session"
   // "github.com/aws/aws-sdk-go/service/ec2"
   "github.com/aws/aws-sdk-go/service/route53"
+  "github.com/Sirupsen/logrus"
 )
 
 // TODO: This is very basic. At some point HealthChecks and GeoLocation may be a good idea.
@@ -42,7 +43,7 @@ func AttachIpToDNS(ip, fqdn, comment string, ttl int64, sess *session.Session) (
   return resp.ChangeInfo, err
 }
 
-// This deletes the DNS record for 
+// This deletes the DNS record for the FQDN.
 func DetachFromDNS(ip, fqdn, comment string, ttl int64, sess *session.Session) (*route53.ChangeInfo, error) {
 
   zone, err := GetHostedZone(fqdn, sess)
@@ -100,6 +101,39 @@ func GetHostedZone(fqdn string, sess *session.Session) (*route53.HostedZone, err
     err = fmt.Errorf("Couldn't find a hosted zone for %s (%s).", fqdn, zone)
   }
   return hzone, err
+}
+
+// returns recrods assocated with the baseFQDN provided.
+func ListDNSRecords(baseFQDN string, sess *session.Session) ([]*route53.ResourceRecordSet, error) {
+  hz, err := GetHostedZone(baseFQDN, sess)
+  if err != nil { return nil, err }
+
+  r53Svc := route53.New(sess)
+  reqIter, totalCount, keptRecords := 0,0,0
+  f := logrus.Fields{"baseFQDB": baseFQDN, "totalCount": totalCount, "reqIter": reqIter, "keptRecords": keptRecords}
+  records := make([]*route53.ResourceRecordSet,0)
+  params := &route53.ListResourceRecordSetsInput{
+    HostedZoneId: hz.Id,
+    StartRecordName: aws.String(baseFQDN),
+    // StartRecordType: aws.String("A")
+  }
+  err = r53Svc.ListResourceRecordSetsPages(params, 
+    func(page *route53.ListResourceRecordSetsOutput, lastPage bool) bool {
+      for _, r := range page.ResourceRecordSets {
+        if strings.Contains(*r.Name, baseFQDN) {
+          records = append(records, r)
+          keptRecords++
+        }
+        totalCount++
+      }
+      reqIter++
+      f["reqIter"] = reqIter
+      f["totalCount"] = totalCount
+      f["keptRecords"] = keptRecords
+      log.Debug(f, "Received records for DNS lookup.")
+      return true
+    })
+  return records, err
 }
 
 // Pull out the TLD from the fqdn.

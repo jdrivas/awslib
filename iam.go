@@ -134,6 +134,10 @@ func GetCurrentAccountNumber(sess *session.Session) (an string, err error) {
 }
 
 
+// CallerIdOutput has:
+// Account *string:  the account numbner
+// Arn *string: arn associated with the user. (the ShortArnString on this is often useful)
+// UserId *strign: a number.
 func GetCurrentAccountIdentity(sess *session.Session) ( *sts.GetCallerIdentityOutput, error ) {
 
   stsSvc := sts.New(sess)
