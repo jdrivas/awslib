@@ -40,6 +40,8 @@ func AttachIpToDNS(ip, fqdn, comment string, ttl int64, sess *session.Session) (
     },
   }
   resp, err := r53Svc.ChangeResourceRecordSets(params)
+  log.Debug(logrus.Fields{"ip": ip, "fqdn": fqdn, "comment": comment, "zone": *zone.Name,},
+    "Attach: updating DNS A Record.")
   return resp.ChangeInfo, err
 }
 
@@ -71,6 +73,8 @@ func DetachFromDNS(ip, fqdn, comment string, ttl int64, sess *session.Session) (
     },
   }
   resp, err := r53Svc.ChangeResourceRecordSets(params)
+  log.Debug(logrus.Fields{"ip": ip, "fqdn": newaddr, "comment": comment, "zone": *zone.Name,}, 
+    "Detach: deleting DNS A Record.")
   return resp.ChangeInfo, err
 }
 
@@ -79,6 +83,7 @@ func GetHostedZone(fqdn string, sess *session.Session) (*route53.HostedZone, err
 
   zone, ok := getZoneString(fqdn)
   if !ok { return nil, fmt.Errorf("GetHostedZone: doesn't seem to be a FQDN: %s", fqdn) }
+  log.Debug(logrus.Fields{"fqdn": fqdn, "zone": zone,}, "Getting Hosted Zone.")
 
   param := &route53.ListHostedZonesByNameInput{
     DNSName: aws.String(zone),
@@ -98,7 +103,7 @@ func GetHostedZone(fqdn string, sess *session.Session) (*route53.HostedZone, err
     }
   }
   if hzone == nil {
-    err = fmt.Errorf("Couldn't find a hosted zone for %s (%s).", fqdn, zone)
+    err = fmt.Errorf("Couldn't find a hosted zone for %s (%s)", fqdn, zone)
   }
   return hzone, err
 }
@@ -137,8 +142,11 @@ func ListDNSRecords(baseFQDN string, sess *session.Session) ([]*route53.Resource
 }
 
 // Pull out the TLD from the fqdn.
+// the bool is false if we couldn't find the string.
+// Removes trailing . (e.g. "foo.bar.com." returns "bar.com")
 func getZoneString(fqdn string) (string, bool) {
-  dn := strings.Split(fqdn, ".")
+
+  dn := strings.Split(strings.TrimSuffix(fqdn, "."), ".")
   l := len(dn)
   if l < 2 || dn[l-2] == "" { return "", false }
   return dn[l-2] + "." + dn[l-1], true

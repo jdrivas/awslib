@@ -15,6 +15,7 @@ func TestGetZoneString(t *testing.T) {
   }{
     {input: "foo.bar.momentlabs.io", expected: "momentlabs.io",},
     {input: "foo.momentlabs.io", expected: "momentlabs.io",},
+    {input: "foo.momentlabs.io.", expected: "momentlabs.io",},
   }
 
   for _, ts := range testEqual {
