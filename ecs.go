@@ -565,12 +565,21 @@ func RunTask(clusterName string, taskDef string, sess *session.Session) (*ecs.Ru
   return resp, err
 }
 
+func WaitForTaskRunning(clusterName, taskArn string, sess *session.Session) (error) {
+  ecsSvc := ecs.New(sess)
+  params := &ecs.DescribeTasksInput{
+    Cluster: aws.String(clusterName),
+    Tasks: []*string{aws.String(taskArn)},
+  }
+  return ecsSvc.WaitUntilTasksRunning(params)
+}
+
 // Should consider returning DTMs for this.
-func OnTaskRunning(clusterName, taskDefArn string, sess *session.Session, do func(*ecs.DescribeTasksOutput, error)) {
+func OnTaskRunning(clusterName, taskArn string, sess *session.Session, do func(*ecs.DescribeTasksOutput, error)) {
     go func() {
       task_params := &ecs.DescribeTasksInput{
         Cluster: aws.String(clusterName),
-        Tasks: []*string{aws.String(taskDefArn)},
+        Tasks: []*string{aws.String(taskArn)},
       }
       ecsSvc := ecs.New(sess)
       err := ecsSvc.WaitUntilTasksRunning(task_params)

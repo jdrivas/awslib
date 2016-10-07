@@ -8,12 +8,19 @@ import(
 )
 
 // Sigh.
-func JoinStringP(sp []*string, sep string) (v string) {
+func StringSlice(sp []*string) ([]string) {
   s := make([]string, len(sp))
   for i, p := range sp {
     s[i] = *p
   }
-  return strings.Join(s, sep)
+  return s
+}
+func JoinStringP(sp []*string, sep string) (v string) {
+  // s := make([]string, len(sp))
+  // for i, p := range sp {
+  //   s[i] = *p
+  // }
+  return strings.Join(StringSlice(sp), sep)
 }
 
 func ShortDurationString(d time.Duration) (s string) {
