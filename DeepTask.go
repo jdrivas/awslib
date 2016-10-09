@@ -2,7 +2,6 @@ package awslib
 
 import(
   "fmt"
-  "sort"
   "time"
   "github.com/aws/aws-sdk-go/aws/session"
   "github.com/aws/aws-sdk-go/service/ecs"
@@ -12,9 +11,6 @@ import(
 // [TaskArn]DeepTask. 
 // A collections of deep tasks indexed by TaskArn.
 type DeepTaskMap map[string]*DeepTask
-
-
-
 
 // We often need quite a lot of information with a task.
 // Deep task goes and gets all of it.
@@ -258,56 +254,37 @@ func makeDeepTaskWith(clusterName, taskArn string, dto *ecs.DescribeTasksOutput,
 }
 
 
-// DeepTaskMask sorting interface.
-type DeepTaskSortType int
-const(
-  ByUptime DeepTaskSortType = iota
-  ByReverseUptime
-)
+// DeepTaskMap sorting interface.
+//
+type deepTaskSort struct {
+  dts []*DeepTask
+  less func( dtI, dtJ *DeepTask) (bool)
+}
+func (s deepTaskSort) Len() int { return len(s.dts) }
+func (s deepTaskSort) Swap(i, j int) { s.dts[i], s.dts[j] = s.dts[j], s.dts[i] }
+func (s deepTaskSort) Less(i, j int) bool { return s.less(s.dts[i], s.dts[j]) }
 
-func (dtm DeepTaskMap) DeepTasks(st DeepTaskSortType) (dts []*DeepTask) {
+func ByUptime(dtl []*DeepTask) (deepTaskSort) {
+  return deepTaskSort{
+    dts: dtl,
+    less: func(dtI, dtJ *DeepTask) (bool) { 
+      uI, eI := dtI.Uptime()
+      uJ, eJ := dtJ.Uptime()
+      switch {
+      case eI != nil && eJ != nil: { return false }
+      case eI != nil: { return true }
+      case eJ != nil: { return false }
+      }
+      return uI < uJ
+    },
+  }
+}
+
+func (dtm DeepTaskMap) DeepTasks() (dts []*DeepTask) {
   dts = make([]*DeepTask, 0, len(dtm))
   for _, dt := range dtm {
     dts = append(dts, dt)
   }
-  switch st {
-    case ByUptime: By(uptime).Sort(dts)
-    case ByReverseUptime: By(reverseUptime).Sort(dts)
-  }
   return dts
 }
 
-// Definition of a deepTask sort less function
-type By func(dt1, dt2 *DeepTask) bool
-
-// Sort uses the less functiom from by, and the stSorter to actually do a sort.
-func (by By) Sort(dts []*DeepTask) {
-  sorter := &dtSorter{
-    dts: dts,
-    by: by,
-  }
-  sort.Sort(sorter)
-}
-// dtSorter, this holds Len() and Swap() and keeps 
-// a variable for a pluggable Less()
-type dtSorter struct {
-  dts []*DeepTask
-  by func(dt1, dt2 *DeepTask) bool
-}
-
-// For sort ..
-func (s *dtSorter) Len() int { return len(s.dts) }
-func (s *dtSorter) Swap(i,j int) { s.dts[i], s.dts[j] = s.dts[j], s.dts[i] }
-func (s *dtSorter) Less(i,j int) bool { return s.by(s.dts[i], s.dts[j]) }
-
-var uptime = func(dt1, dt2 *DeepTask) bool {
-  ut1, _ := dt1.Uptime()
-  ut2, _ := dt2.Uptime()
-  return ut1 < ut2
-}
-
-var reverseUptime = func(dt1, dt2 *DeepTask) bool {
-  ut1, _ := dt1.Uptime()
-  ut2, _ := dt2.Uptime()
-  return ut2 < ut1
-}
