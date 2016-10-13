@@ -52,6 +52,16 @@ func GetDeepTasks(clusterName string, sess *session.Session) (dtm DeepTaskMap, e
   }
   return dtm, err
 }
+
+func (dtm DeepTaskMap) DeepTasks() (dts []*DeepTask) {
+  dts = make([]*DeepTask, 0, len(dtm))
+  for _, dt := range dtm {
+    dts = append(dts, dt)
+  }
+  return dts
+}
+
+
 // this is expensive. It makes 4 calls to AWS to get information.
 func GetDeepTask(clusterName, taskArn string, sess *session.Session) (dt *DeepTask, err error) {
   dto, err := GetTaskDescription(clusterName, taskArn, sess)  // ecs.DescribeTasksOutput
@@ -280,11 +290,5 @@ func ByUptime(dtl []*DeepTask) (deepTaskSort) {
   }
 }
 
-func (dtm DeepTaskMap) DeepTasks() (dts []*DeepTask) {
-  dts = make([]*DeepTask, 0, len(dtm))
-  for _, dt := range dtm {
-    dts = append(dts, dt)
-  }
-  return dts
-}
+
 
