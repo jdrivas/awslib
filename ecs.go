@@ -425,13 +425,14 @@ func OnContainerInstanceActive(clusterName string, ec2InstanceId string, sess *s
 //
 
 
-func ListTasksForCluster(clusterName string, ecs_svc *ecs.ECS) ([]*string, error) {
+func ListTasks(clusterName string, sess *session.Session) ([]*string, error) {
 
+  ecsSvc := ecs.New(sess)
   params := &ecs.ListTasksInput{
     Cluster: aws.String(clusterName),
     MaxResults: aws.Int64(100),
   }
-  resp, err := ecs_svc.ListTasks(params)
+  resp, err := ecsSvc.ListTasks(params)
   return resp.TaskArns, err
 }
 
@@ -466,9 +467,9 @@ func (ct *ContainerTask) TimeToStart() (time.Duration) {
 type ContainerTaskMap map[string]*ContainerTask
 
 
-func GetAllTaskDescriptions(clusterName string, ecs_svc *ecs.ECS) (ContainerTaskMap, error) {
+func GetAllTaskDescriptions(clusterName string, sess *session.Session) (ContainerTaskMap, error) {
  
- taskArns, err := ListTasksForCluster(clusterName, ecs_svc)
+ taskArns, err := ListTasks(clusterName, sess)
  if err != nil { return make(ContainerTaskMap), err}
 
  // Describe task will fail with no arns.
@@ -476,12 +477,13 @@ func GetAllTaskDescriptions(clusterName string, ecs_svc *ecs.ECS) (ContainerTask
   return make(ContainerTaskMap), nil
  }
 
+
+ ecsSvc := ecs.New(sess)
   params := &ecs.DescribeTasksInput {
     Cluster: aws.String(clusterName),
     Tasks: taskArns,
   }
-
-  resp, err := ecs_svc.DescribeTasks(params)
+  resp, err := ecsSvc.DescribeTasks(params)
   return makeCTMapFromDescribeTasksOutput(resp), err
 }
 

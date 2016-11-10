@@ -26,9 +26,8 @@ type DeepTask struct {
 }
 
 func GetDeepTasks(clusterName string, sess *session.Session) (dtm DeepTaskMap, err error) {
-  ecsSvc := ecs.New(sess)
   dtm = make(DeepTaskMap)
-  ctMap, err := GetAllTaskDescriptions(clusterName, ecsSvc)
+  ctMap, err := GetAllTaskDescriptions(clusterName, sess)
   if err != nil {return dtm, fmt.Errorf("GetDeepTasks: No tasks for cluster \"%s\": %s", clusterName, err)}
   // Quitely eat errors here.
   ciMap, ec2Map, err := GetContainerMaps(clusterName, sess)
