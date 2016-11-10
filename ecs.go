@@ -66,7 +66,6 @@ func DescribeCluster(clusterName string, sess *session.Session) ([]*ecs.Cluster,
   return resp.Clusters, err
 }
 
-// func GetAllClusterDescriptions(ecsSvc *ecs.ECS) ([]*ecs.Cluster, error) {
 func GetAllClusterDescriptions(sess *session.Session) (Clusters, error) {
   clusterArns, err := GetClusters(sess)
   if err != nil {return make([]*ecs.Cluster, 0), err}
@@ -79,7 +78,6 @@ func GetAllClusterDescriptions(sess *session.Session) (Clusters, error) {
   resp, err := ecsSvc.DescribeClusters(params)
   return resp.Clusters, err
 }
-
 
 type Clusters []*ecs.Cluster
 type ClusterSortType int
@@ -357,14 +355,17 @@ func GetContainerMaps(clusterName string, sess *session.Session) (ciMap Containe
   return ciMap, ec2Map, err
 }
 
-func TerminateContainerInstance(clusterName string, containerArn string, ecs_svc *ecs.ECS, ec2Svc *ec2.EC2) (resp *ec2.TerminateInstancesOutput, err error) {
+func TerminateContainerInstance(clusterName string, containerArn string, sess *session.Session) (resp *ec2.TerminateInstancesOutput, err error) {
+
+  ecsSvc := ecs.New(sess)
+  ec2Svc := ec2.New(sess)
 
   // Need to get the container instance description in order to get the ec2-instanceID.
   params := &ecs.DescribeContainerInstancesInput{
     ContainerInstances: []*string{aws.String(containerArn)},
     Cluster: aws.String(clusterName),
   }
-  dci_resp, err := ecs_svc.DescribeContainerInstances(params)
+  dci_resp, err := ecsSvc.DescribeContainerInstances(params)
   if err != nil {
     return nil, err
   }
