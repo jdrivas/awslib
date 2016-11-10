@@ -148,8 +148,17 @@ type ContainerInstance struct {
   Failure *ecs.Failure
 }
 
+func (ci *ContainerInstance) RegisteredResources() (ResourceMap) {
+  return collectResources(ci.Instance.RegisteredResources)
+}
+
+func (ci *ContainerInstance) RemainingResources() (ResourceMap) {
+  return collectResources(ci.Instance.RemainingResources)
+}
+
 // Keyed on ConatinerInstanceArn or Ec2InstanceId
 type ContainerInstanceMap map[string]*ContainerInstance
+
 
 func GetAllContainerInstanceDescriptions(clusterName string, sess *session.Session) (ContainerInstanceMap, error) {
 
@@ -269,42 +278,81 @@ type InstanceResource struct {
   RunningTasks int64
 }
 
+// This will add a new resoruce to the map,
+// it will aggregate values if add a resource
+// with the same name as one already in the map.
+func (rMap ResourceMap) Add(r *ecs.Resource) {
+
+  // Check to see if we've already got the named reesource
+  newR, ok := rMap[*r.Name]
+  if !ok { // create a new one.
+    newR := new(ecs.Resource)
+    rMap[*r.Name] = newR
+    newR.Name = r.Name
+    newR.Type = r.Type
+    switch *r.Type {
+      case "INTEGER":
+        newR.IntegerValue = new(int64)
+      case "LONG": 
+        newR.LongValue = new(int64)
+      case "DOUBLE": 
+        newR.DoubleValue = new(float64)
+      case "STRINGSET": 
+        newR.StringSetValue = make([]*string, 0, len(r.StringSetValue))
+    }
+  }
+
+  // Now set or aggregate the value
+  switch *r.Type {
+    case "INTEGER":
+      *newR.IntegerValue += *r.IntegerValue
+    case "LONG": 
+      *newR.LongValue += *r.LongValue
+    case "DOUBLE": 
+      *newR.DoubleValue +=  *r.DoubleValue
+    case "STRINGSET":
+      newR.StringSetValue = append(newR.StringSetValue, r.StringSetValue...)
+  }
+
+}
+
 func collectResources(rs []*ecs.Resource) (ResourceMap) {
   // cs := make([]*ecs.Resource, 0)
 
   // csMap := make(map[string]*ecs.Resource,0)
   csMap := make(ResourceMap, 0)
   for _, r := range rs {
-    // Check to see if we already have the resource ...
-    newr, ok := csMap[*r.Name]
-    if !ok { // ... no, create a new one.
-      newr = new(ecs.Resource)
-      csMap[*r.Name] = newr
-      newr.Name = r.Name
-      newr.Type = r.Type
-      switch *r.Type {
-      case "INTEGER":
-        newr.IntegerValue = new(int64)
-      case "LONG": 
-        newr.LongValue = new(int64)
-      case "DOUBLE": 
-        newr.DoubleValue = new(float64)
-      case "STRINGSET": 
-        newr.StringSetValue = make([]*string, 0, len(r.StringSetValue))
-      }
-    }
+    csMap.Add(r)
+    // // Check to see if we already have the resource ...
+    // newr, ok := csMap[*r.Name]
+    // if !ok { // ... no, create a new one.
+    //   newr = new(ecs.Resource)
+    //   csMap[*r.Name] = newr
+    //   newr.Name = r.Name
+    //   newr.Type = r.Type
+    //   switch *r.Type {
+    //   case "INTEGER":
+    //     newr.IntegerValue = new(int64)
+    //   case "LONG": 
+    //     newr.LongValue = new(int64)
+    //   case "DOUBLE": 
+    //     newr.DoubleValue = new(float64)
+    //   case "STRINGSET": 
+    //     newr.StringSetValue = make([]*string, 0, len(r.StringSetValue))
+    //   }
+    // }
 
-    // ... once we have the resource, add the new value to the old.
-    switch *r.Type {
-    case "INTEGER":
-      *newr.IntegerValue += *r.IntegerValue
-    case "LONG": 
-      *newr.LongValue += *r.LongValue
-    case "DOUBLE": 
-      *newr.DoubleValue +=  *r.DoubleValue
-    case "STRINGSET":
-      newr.StringSetValue = append(newr.StringSetValue, r.StringSetValue...)
-    }
+    // // ... once we have the resource, add the new value to the old.
+    // switch *r.Type {
+    // case "INTEGER":
+    //   *newr.IntegerValue += *r.IntegerValue
+    // case "LONG": 
+    //   *newr.LongValue += *r.LongValue
+    // case "DOUBLE": 
+    //   *newr.DoubleValue +=  *r.DoubleValue
+    // case "STRINGSET":
+    //   newr.StringSetValue = append(newr.StringSetValue, r.StringSetValue...)
+    // }
   }
 
   // for _, r := range csMap {
