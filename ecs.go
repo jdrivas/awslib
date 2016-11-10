@@ -358,7 +358,6 @@ func GetContainerMaps(clusterName string, sess *session.Session) (ciMap Containe
 func TerminateContainerInstance(clusterName string, containerArn string, sess *session.Session) (resp *ec2.TerminateInstancesOutput, err error) {
 
   ecsSvc := ecs.New(sess)
-  ec2Svc := ec2.New(sess)
 
   // Need to get the container instance description in order to get the ec2-instanceID.
   params := &ecs.DescribeContainerInstancesInput{
@@ -376,7 +375,7 @@ func TerminateContainerInstance(clusterName string, containerArn string, sess *s
     err = errors.New(errMessage)
     resp = nil
   } else {
-   resp, err = TerminateInstance(instanceId, ec2Svc)
+   resp, err = TerminateInstance(instanceId, sess)
   }
 
   return resp, err

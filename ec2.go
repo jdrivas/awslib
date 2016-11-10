@@ -83,7 +83,7 @@ func GetInstanceForId(instanceId string, sess *session.Session)(inst *ec2.Instan
 
 func LaunchInstanceWithTags(clusterName string, tags []*ec2.Tag, sess *session.Session) (*ec2.Reservation, error) {
   ec2Svc := ec2.New(sess)
-  res, err := LaunchInstance(clusterName, ec2Svc)
+  res, err := LaunchInstance(clusterName, sess)
   if err == nil {
     params := &ec2.DescribeInstancesInput{
       DryRun: aws.Bool(false),
@@ -118,7 +118,9 @@ func LaunchInstanceWithTags(clusterName string, tags []*ec2.Tag, sess *session.S
 // 1. Remove cluster name
 // 2. Need to find a middle ground in providing configuration inputs between everything in RunInstancesInput and
 //    what we currently have.
-func LaunchInstance(clusterName string, ec2Svc *ec2.EC2) (*ec2.Reservation, error) {
+func LaunchInstance(clusterName string, sess *session.Session) (*ec2.Reservation, error) {
+
+  ec2Svc := ec2.New(sess)
 
   userData, err := getUserData(clusterName)
   if err != nil {
@@ -362,7 +364,8 @@ func OnInstanceRunning(reservation *ec2.Reservation, sess *session.Session, do f
   }()
 }
 
-func OnInstanceOk(reservation *ec2.Reservation, ec2_svc *ec2.EC2, do func(error)) {
+func OnInstanceOk(reservation *ec2.Reservation, sess *session.Session, do func(error)) {
+  ec2Svc := ec2.New(sess)
   iIds := make([]*string, len(reservation.Instances))
   for _, inst := range reservation.Instances {
     iIds = append(iIds, inst.InstanceId)
@@ -378,12 +381,13 @@ func OnInstanceOk(reservation *ec2.Reservation, ec2_svc *ec2.EC2, do func(error)
       //   },
       // },
     }
-    err := ec2_svc.WaitUntilInstanceStatusOk(params)
+    err := ec2Svc.WaitUntilInstanceStatusOk(params)
     do(err)
   }()
 }
 
-func TerminateInstance(instanceId *string, ec2Svc *ec2.EC2) (*ec2.TerminateInstancesOutput, error) {
+func TerminateInstance(instanceId *string, sess *session.Session) (*ec2.TerminateInstancesOutput, error) {
+  ec2Svc := ec2.New(sess)
   params := &ec2.TerminateInstancesInput{
     InstanceIds: []*string{ aws.String(*instanceId) },
     DryRun: aws.Bool(false),
@@ -392,7 +396,8 @@ func TerminateInstance(instanceId *string, ec2Svc *ec2.EC2) (*ec2.TerminateInsta
   return resp, err
 }
 
-func OnInstanceTerminated(instanceId *string, ec2Svc *ec2.EC2, do func(error)) {
+func OnInstanceTerminated(instanceId *string, sess *session.Session, do func(error)) {
+  ec2Svc := ec2.New(sess)
   go func() {
     params := &ec2.DescribeInstancesInput{
       DryRun: aws.Bool(false),
