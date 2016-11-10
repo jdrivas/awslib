@@ -18,11 +18,12 @@ import (
 // CLUSTERS
 //
 
-func CreateCluster(clusterName string, svc *ecs.ECS) (*ecs.Cluster, error) {
+func CreateCluster(clusterName string, sess *session.Session) (*ecs.Cluster, error) {
+  ecsSvc := ecs.New(sess)
   params := &ecs.CreateClusterInput{
     ClusterName: aws.String(clusterName),
   }
-  resp, err := svc.CreateCluster(params)
+  resp, err := ecsSvc.CreateCluster(params)
   var cluster *ecs.Cluster
   if err == nil {
     cluster = resp.Cluster
@@ -30,11 +31,12 @@ func CreateCluster(clusterName string, svc *ecs.ECS) (*ecs.Cluster, error) {
   return cluster, err
 }
 
-func DeleteCluster(clusterName string, svc *ecs.ECS) (*ecs.Cluster, error) {
+func DeleteCluster(clusterName string, sess *session.Session) (*ecs.Cluster, error) {
+  ecsSvc := ecs.New(sess)
   params := &ecs.DeleteClusterInput{
     Cluster: aws.String(clusterName),
   }
-  resp, err := svc.DeleteCluster(params)
+  resp, err := ecsSvc.DeleteCluster(params)
   var cluster *ecs.Cluster
   if err == nil {
     cluster = resp.Cluster
@@ -42,32 +44,34 @@ func DeleteCluster(clusterName string, svc *ecs.ECS) (*ecs.Cluster, error) {
   return cluster, err
 }
 
-func GetClusters(svc *ecs.ECS) ([]*string, error) {
-
-  params := &ecs.ListClustersInput {
-    MaxResults: aws.Int64(100),
-  } // TODO: this only will get the first 100 ....
-  output, err := svc.ListClusters(params)
-  clusters := output.ClusterArns
-  return clusters, err
+func GetClusters(sess *session.Session) ([]*string, error) {
+  ecsSvc := ecs.New(sess)
+  arns := make([]*string, 0)
+  err := ecsSvc.ListClustersPages(&ecs.ListClustersInput{}, 
+    func(page *ecs.ListClustersOutput, lastPage bool) bool {
+      arns = append(arns, page.ClusterArns... )
+      return true
+  })
+  return arns, err
 }
 
-func DescribeCluster(clusterName string, svc *ecs.ECS) ([]*ecs.Cluster, error) {
-  
+func DescribeCluster(clusterName string, sess *session.Session) ([]*ecs.Cluster, error) {
+
+  ecsSvc := ecs.New(sess)  
   params := &ecs.DescribeClustersInput {
     Clusters: []*string{aws.String(clusterName),},
   }
 
-  resp, err := svc.DescribeClusters(params)
+  resp, err := ecsSvc.DescribeClusters(params)
   return resp.Clusters, err
 }
 
 // func GetAllClusterDescriptions(ecsSvc *ecs.ECS) ([]*ecs.Cluster, error) {
 func GetAllClusterDescriptions(sess *session.Session) (Clusters, error) {
-  ecsSvc := ecs.New(sess)
-  clusterArns, err := GetClusters(ecsSvc)
+  clusterArns, err := GetClusters(sess)
   if err != nil {return make([]*ecs.Cluster, 0), err}
 
+  ecsSvc := ecs.New(sess)
   params := &ecs.DescribeClustersInput {
     Clusters: clusterArns,
   }

@@ -60,7 +60,7 @@ func CollectBindings(task *ecs.Task) (string) {
     if len(bdgs) == 0 {continue}
     s += *c.Name + ": "
     for _, b := range bdgs {
-      s += fmt.Sprintf("%d->%d, ", *b.ContainerPort, *b.HostPort)
+      s += fmt.Sprintf("%d->%d/%s, ", *b.ContainerPort, *b.HostPort, *b.Protocol)
     }
   }
   s = strings.Trim(s,", ")
