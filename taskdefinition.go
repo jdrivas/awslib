@@ -25,11 +25,12 @@ func ListTaskDefinitionFamilies(sess *session.Session) ([]*string, error) {
 }
 
 // returns a collection of all registred task definition arns.
-func ListTaskDefinitions(ecs_svc *ecs.ECS) ([]*string, error) {
+func ListTaskDefinitions(sess *session.Session) ([]*string, error) {
+  ecsSvc := ecs.New(sess)
   params := &ecs.ListTaskDefinitionsInput{
     MaxResults: aws.Int64(100),
   }
-  resp, err := ecs_svc.ListTaskDefinitions(params)
+  resp, err := ecsSvc.ListTaskDefinitions(params)
   return resp.TaskDefinitionArns, err
 }
 
