@@ -159,7 +159,6 @@ func (ci *ContainerInstance) RemainingResources() (ResourceMap) {
 // Keyed on ConatinerInstanceArn or Ec2InstanceId
 type ContainerInstanceMap map[string]*ContainerInstance
 
-
 func GetAllContainerInstanceDescriptions(clusterName string, sess *session.Session) (ContainerInstanceMap, error) {
 
   instanceArns, err := GetContainerInstances(clusterName, sess)
@@ -285,11 +284,13 @@ func (rMap ResourceMap) Add(r *ecs.Resource) {
 
   // Check to see if we've already got the named reesource
   newR, ok := rMap[*r.Name]
+  n := *r.Name
+  t := *r.Type
   if !ok { // create a new one.
-    newR := new(ecs.Resource)
+    newR = new(ecs.Resource)
     rMap[*r.Name] = newR
-    newR.Name = r.Name
-    newR.Type = r.Type
+    newR.Name = &n
+    newR.Type = &t
     switch *r.Type {
       case "INTEGER":
         newR.IntegerValue = new(int64)
@@ -301,6 +302,7 @@ func (rMap ResourceMap) Add(r *ecs.Resource) {
         newR.StringSetValue = make([]*string, 0, len(r.StringSetValue))
     }
   }
+
 
   // Now set or aggregate the value
   switch *r.Type {
@@ -323,6 +325,7 @@ func collectResources(rs []*ecs.Resource) (ResourceMap) {
   csMap := make(ResourceMap, 0)
   for _, r := range rs {
     csMap.Add(r)
+    fmt.Printf("Adding new resource %#v", *r)
     // // Check to see if we already have the resource ...
     // newr, ok := csMap[*r.Name]
     // if !ok { // ... no, create a new one.
