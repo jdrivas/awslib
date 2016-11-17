@@ -277,6 +277,14 @@ type InstanceResource struct {
   RunningTasks int64
 }
 
+// These are the constants for the known keys for resources.
+
+const(
+  MEMORY = "MEMORY"
+  CPU = "CPU"
+)
+
+
 // This will add a new resoruce to the map,
 // it will aggregate values if add a resource
 // with the same name as one already in the map.
@@ -325,42 +333,7 @@ func collectResources(rs []*ecs.Resource) (ResourceMap) {
   csMap := make(ResourceMap, 0)
   for _, r := range rs {
     csMap.Add(r)
-    fmt.Printf("Adding new resource %#v", *r)
-    // // Check to see if we already have the resource ...
-    // newr, ok := csMap[*r.Name]
-    // if !ok { // ... no, create a new one.
-    //   newr = new(ecs.Resource)
-    //   csMap[*r.Name] = newr
-    //   newr.Name = r.Name
-    //   newr.Type = r.Type
-    //   switch *r.Type {
-    //   case "INTEGER":
-    //     newr.IntegerValue = new(int64)
-    //   case "LONG": 
-    //     newr.LongValue = new(int64)
-    //   case "DOUBLE": 
-    //     newr.DoubleValue = new(float64)
-    //   case "STRINGSET": 
-    //     newr.StringSetValue = make([]*string, 0, len(r.StringSetValue))
-    //   }
-    // }
-
-    // // ... once we have the resource, add the new value to the old.
-    // switch *r.Type {
-    // case "INTEGER":
-    //   *newr.IntegerValue += *r.IntegerValue
-    // case "LONG": 
-    //   *newr.LongValue += *r.LongValue
-    // case "DOUBLE": 
-    //   *newr.DoubleValue +=  *r.DoubleValue
-    // case "STRINGSET":
-    //   newr.StringSetValue = append(newr.StringSetValue, r.StringSetValue...)
-    // }
   }
-
-  // for _, r := range csMap {
-  //   cs = append(cs, r)
-  // }
   return csMap
 }
 
@@ -376,6 +349,7 @@ func (rm ResourceMap) StringFor(resourceName string) (v string) {
 // TODO: Should add a gather flag for totaling values in StringSet.
 // e,g. ["1", "2", "3", "2", "1", "4"] => "1:2, 2:2, 3:1, 4:1" or something.
 func getValueString(r *ecs.Resource) (v string) {
+
     switch *r.Type {
     case "INTEGER", "LONG": 
       v = strconv.FormatInt(*r.IntegerValue,10)
