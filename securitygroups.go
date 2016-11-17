@@ -2,17 +2,9 @@ package awslib
 
 import (
   "fmt"
-  // "errors"
-  // "io"
-  // "sort"
   "strings"
-  // "strconv"
-  // "time"
-  // "github.com/aws/aws-sdk-go/aws"
   "github.com/aws/aws-sdk-go/aws/session"
-  // "github.com/aws/aws-sdk-go/service/ecs"
   "github.com/aws/aws-sdk-go/service/ec2"
-  // "github.com/Sirupsen/logrus"
 )
 
 func DescribeSecurityGroup(groupId string, sess *session.Session) (*ec2.SecurityGroup, error) {
