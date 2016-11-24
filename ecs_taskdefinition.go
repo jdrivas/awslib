@@ -2,6 +2,7 @@ package awslib
 
 import(
   "io"
+  "strings"
   "github.com/aws/aws-sdk-go/aws"
   "github.com/aws/aws-sdk-go/aws/session"
   "github.com/aws/aws-sdk-go/service/ecs"
@@ -71,6 +72,13 @@ func RegisterTaskDefinitionWithJSON(json io.Reader, sess *session.Session) (*ecs
   }
   return resp, err
 }
+
+// This parses a TaskDefinitionArn and returns just the Family portion.
+func TaskDefinitionFamily(taskDefinitionArn *string) (f string) {
+  f = strings.Split(ShortArnString(taskDefinitionArn), ":")[0]
+  return f
+}
+
 
 func DefaultTaskDefinition() (ecs.RegisterTaskDefinitionInput) {
     var tdi = ecs.RegisterTaskDefinitionInput{
@@ -288,25 +296,5 @@ func CompleteEmptyTaskDefinition() (ecs.RegisterTaskDefinitionInput) {
   }
   return tdi
 }
-// func WaitForContainerInstanceStateChange(delaySeconds, periodSeconds int, currentState string, 
-//   clusterName string, conatinerIntstanceArn string, ecs_svc *ecs.ECS, cb func(string, error)) {
-//   go func() {
-//     time.Sleep(time.Second * time.Duration(delaySeconds))
-//     var e error
-//     var status string
-//     for ci, e := s.GetContainerInstanceDescription(); e == nil;  {
-//       if *sd.StreamStatus != currentState {
-//         status = *sd.StreamStatus
-//         break;
-//       }
-//       time.Sleep(time.Second * time.Duration(periodSeconds))
-//       sd, e = s.GetAWSDescription()
-//     }
-//     cb(status, e)
-//   }()
-// }
 
 
-//
-// Containers
-//
