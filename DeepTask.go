@@ -234,8 +234,11 @@ func makeDeepTaskWith(clusterName, taskArn string, dto *ecs.DescribeTasksOutput,
   if len(ctMap) > 1 {
     log.Debug(logrus.Fields{"numberOfTasks": len(ctMap),}, "We got more than one task with our request.")
   }
-  ct, ok := ctMap[taskArn] 
-  if !ok { return nil, fmt.Errorf("Couldn't find the task for: %s.", taskArn)}
+
+  // fmt.Printf("Looking for TaskArn: %s in:\n %#v\n", taskArn, ctMap)
+
+  ct, ok := ctMap[taskArn]
+  if !ok { return nil, fmt.Errorf("Failed to find the taskArn in the map for: %s.", taskArn)}
 
   ciMap, ec2Map, err := GetContainerMaps(clusterName, sess)
 
