@@ -173,7 +173,6 @@ const(
   CPU = "CPU"
 )
 
-
 // This will add a new resoruce to the map,
 // it will aggregate values if add a resource
 // with the same name as one already in the map.
@@ -199,7 +198,6 @@ func (rMap ResourceMap) Add(r *ecs.Resource) {
         newR.StringSetValue = make([]*string, 0, len(r.StringSetValue))
     }
   }
-
 
   // Now set or aggregate the value
   switch *r.Type {
@@ -249,7 +247,6 @@ func getValueString(r *ecs.Resource) (v string) {
   }
   return v
 }
-
 
 
 // Returns both the CotnainerInstanceMap (cis index by ciArn) and the ec2version ec2Is on ec2ID (not arn)
