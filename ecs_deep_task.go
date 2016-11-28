@@ -69,7 +69,13 @@ func GetDeepTask(clusterName, taskArn string, sess *session.Session) (dt *DeepTa
   return dt, err
 }
 
+
 // TODO: There are more of these to do ...... 
+func (dt DeepTask) StartedAtString() (string) {
+  if dt.Task.StartedAt == nil { return "--" }
+  return dt.Task.StartedAt.Local().Format(time.RFC1123)
+}
+
 func (dt DeepTask) UptimeString() (string) {
   if dt.Task.StartedAt == nil { return "--"}
   uptime, _ := dt.Uptime()
@@ -235,7 +241,7 @@ func makeDeepTaskWith(clusterName, taskArn string, dto *ecs.DescribeTasksOutput,
     log.Debug(logrus.Fields{"numberOfTasks": len(ctMap),}, "We got more than one task with our request.")
   }
 
-  // fmt.Printf("Looking for TaskArn: %s in:\n %#v\n", taskArn, ctMap)
+  fmt.Printf("Looking for TaskArn: %s in:\n %#v\n", taskArn, ctMap)
 
   ct, ok := ctMap[taskArn]
   if !ok { return nil, fmt.Errorf("Failed to find the taskArn in the map for: %s.", taskArn)}
