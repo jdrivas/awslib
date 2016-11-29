@@ -241,7 +241,7 @@ func makeDeepTaskWith(clusterName, taskArn string, dto *ecs.DescribeTasksOutput,
     log.Debug(logrus.Fields{"numberOfTasks": len(ctMap),}, "We got more than one task with our request.")
   }
 
-  fmt.Printf("Looking for TaskArn: %s in:\n %#v\n", taskArn, ctMap)
+  // fmt.Printf("Looking for TaskArn: %s in:\n %#v\n", taskArn, ctMap)
 
   ct, ok := ctMap[taskArn]
   if !ok { return nil, fmt.Errorf("Failed to find the taskArn in the map for: %s.", taskArn)}
