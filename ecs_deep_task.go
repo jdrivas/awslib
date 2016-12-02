@@ -2,7 +2,7 @@ package awslib
 
 import(
   "fmt"
-  // "sort"
+  "strings"
   "time"
   "github.com/aws/aws-sdk-go/aws/session"
   "github.com/aws/aws-sdk-go/service/ecs"
@@ -114,6 +114,22 @@ func (dt DeepTask) Uptime() (ut time.Duration, err error) {
     err = fmt.Errorf("Empty ecs.Task.StartedAt can't compute uptime.")
   }
   return ut, err
+}
+
+func (dtI DeepTask) StartedAtLess(dtJ DeepTask) (bool) {
+  ti := dtI.Task.StartedAt
+  tj := dtJ.Task.StartedAt
+  switch {
+    case ti == nil && tj == nil: 
+    r := strings.Compare(fmt.Sprintf("%s", &dtI), fmt.Sprintf("%s", &dtJ))
+    switch {
+      case r <= 0: return true
+      case r > 0: return false
+    }
+    case ti == nil: return true
+    case tj == nil: return false
+  }
+  return ti.Before(*tj)
 }
 
 func (dtI DeepTask) UptimeLess(dtJ DeepTask) (bool) {
@@ -307,9 +323,7 @@ func makeDeepTaskWith(clusterName, taskArn string, dto *ecs.DescribeTasksOutput,
 }
 
 
-
 // DeepTask Sorting 
-
 type deepTaskSort struct {
   dts []*DeepTask
   less func( dtI, dtJ *DeepTask) (bool)
@@ -318,52 +332,16 @@ func (s deepTaskSort) Len() int { return len(s.dts) }
 func (s deepTaskSort) Swap(i, j int) { s.dts[i], s.dts[j] = s.dts[j], s.dts[i] }
 func (s deepTaskSort) Less(i, j int) bool { return s.less(s.dts[i], s.dts[j]) }
 
-
 func ByUptime(dtl []*DeepTask) (deepTaskSort) {
   return deepTaskSort{
     dts: dtl,
-    less: func(dtI, dtJ *DeepTask) (bool) { 
-      return dtI.UptimeLess(*dtJ)
-      // uI, eI := dtI.Uptime()
-      // uJ, eJ := dtJ.Uptime()
-      // switch {
-      // case eI != nil && eJ != nil: { return false }
-      // case eI != nil: { return true }
-      // case eJ != nil: { return false }
-      // }
-      // return uI < uJ
-    },
+    less: func(dtI, dtJ *DeepTask) (bool) { return dtI.UptimeLess(*dtJ) },
   }
 }
 
-// DeepTaskMap sorting
-type dtmSort struct {
-  dtm DeepTaskMap
-  sKeys []string
-  less func( dtKeyI, dtKeyJ string) (bool)
-}
-func(sdtm dtmSort) Len() int { return len(sdtm.dtm) }
-func(sdtm dtmSort) Swap(i, j int) { sdtm.sKeys[i], sdtm.sKeys[j] = sdtm.sKeys[j], sdtm.sKeys[i] }
-func(sdtm dtmSort) Less(i, j int) (bool) { return sdtm.less(sdtm.sKeys[i], sdtm.sKeys[j]) }
-
-// This is klunky, but it's what I've got so far.
-// The use is: 
-// keys := dtm.TaskArns()
-// sort.Sort(awslib.DTMKeysByUptime(dtm, &keys))
-// for i, arn := range keys {}
-func DTMKeysByUptime(dtm DeepTaskMap, keys *[]string) (dtmSort) {
-  return dtmSort {
-    dtm: dtm,
-    sKeys: *keys,
-    less: func(dtKeyI, dtKeyJ string) (bool) {
-      return dtm[dtKeyI].UptimeLess(*dtm[dtKeyJ])
-    },
+func ByStartedAt(dtl []*DeepTask) (deepTaskSort) {
+  return deepTaskSort{
+    dts: dtl,
+    less: func(dtI, dtJ *DeepTask) (bool) { return dtI.StartedAtLess(*dtJ) },
   }
 }
-
-// func (dtm DeepTaskMap) ArnsByUptime() ([]string) {
-//   sortable := dtmByUptime(dtm)
-//   sort.Sort(sort.Reverse(sortable))
-//   return sortable.sKeys
-// }
-
