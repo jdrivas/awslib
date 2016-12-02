@@ -2,6 +2,7 @@ package awslib
 
 import(
   "fmt"
+  // "sort"
   "time"
   "github.com/aws/aws-sdk-go/aws/session"
   "github.com/aws/aws-sdk-go/service/ecs"
@@ -11,6 +12,24 @@ import(
 // [TaskArn]DeepTask. 
 // A collections of deep tasks indexed by TaskArn.
 type DeepTaskMap map[string]*DeepTask
+
+func (dtm DeepTaskMap) DeepTasks() (dts []*DeepTask) {
+  dts = make([]*DeepTask, 0, len(dtm))
+  for _, dt := range dtm {
+    dts = append(dts, dt)
+  }
+  return dts
+}
+
+func (dtm DeepTaskMap) TaskArns() (arns []string) {
+  arns = make([]string, len(dtm))
+  i := 0
+  for a, _ := range dtm {
+    arns [i] = a
+    i++
+  }
+  return arns
+}
 
 // We often need quite a lot of information with a task.
 // Deep task goes and gets all of it.
@@ -25,6 +44,13 @@ type DeepTask struct {
   EC2Instance *ec2.Instance
 }
 
+
+// TODO: Early optimization is the root of all evil. In this case it was just plain dumb. 
+// Need to reserse the work with GetDeepTaskList so that it does all of the work, then 
+// we construct the task map out of the list. Sigh, because while we're at it, the bigger job
+// of changing the names is what we should do: GetDeepTasks => GetDeepTaskMap; GetDeepTaskList => GetDeepTasks
+
+// Returns the tasks associated with this cluster as a map [TaskArn]*DeepTask
 func GetDeepTasks(clusterName string, sess *session.Session) (dtm DeepTaskMap, err error) {
   dtm = make(DeepTaskMap)
   ctMap, err := GetAllTaskDescriptions(clusterName, sess)
@@ -52,12 +78,10 @@ func GetDeepTasks(clusterName string, sess *session.Session) (dtm DeepTaskMap, e
   return dtm, err
 }
 
-func (dtm DeepTaskMap) DeepTasks() (dts []*DeepTask) {
-  dts = make([]*DeepTask, 0, len(dtm))
-  for _, dt := range dtm {
-    dts = append(dts, dt)
-  }
-  return dts
+func GetDeepTaskList(clusterName string, sess *session.Session) (dtl []*DeepTask, err error) {
+  dtm, err := GetDeepTasks(clusterName, sess)
+  if err == nil { dtl = dtm.DeepTasks()}
+  return dtl, err
 }
 
 
@@ -90,6 +114,17 @@ func (dt DeepTask) Uptime() (ut time.Duration, err error) {
     err = fmt.Errorf("Empty ecs.Task.StartedAt can't compute uptime.")
   }
   return ut, err
+}
+
+func (dtI DeepTask) UptimeLess(dtJ DeepTask) (bool) {
+  uI, eI := dtI.Uptime()
+  uJ, eJ := dtJ.Uptime()
+  switch {
+  case eI != nil && eJ != nil: { return false }
+  case eI != nil: { return true }
+  case eJ != nil: { return false }
+  }
+  return uI < uJ
 }
 
 func(dt DeepTask) LastStatus() (string) {
@@ -272,8 +307,9 @@ func makeDeepTaskWith(clusterName, taskArn string, dto *ecs.DescribeTasksOutput,
 }
 
 
-// DeepTaskMap sorting interface.
-//
+
+// DeepTask Sorting 
+
 type deepTaskSort struct {
   dts []*DeepTask
   less func( dtI, dtJ *DeepTask) (bool)
@@ -282,21 +318,52 @@ func (s deepTaskSort) Len() int { return len(s.dts) }
 func (s deepTaskSort) Swap(i, j int) { s.dts[i], s.dts[j] = s.dts[j], s.dts[i] }
 func (s deepTaskSort) Less(i, j int) bool { return s.less(s.dts[i], s.dts[j]) }
 
+
 func ByUptime(dtl []*DeepTask) (deepTaskSort) {
   return deepTaskSort{
     dts: dtl,
     less: func(dtI, dtJ *DeepTask) (bool) { 
-      uI, eI := dtI.Uptime()
-      uJ, eJ := dtJ.Uptime()
-      switch {
-      case eI != nil && eJ != nil: { return false }
-      case eI != nil: { return true }
-      case eJ != nil: { return false }
-      }
-      return uI < uJ
+      return dtI.UptimeLess(*dtJ)
+      // uI, eI := dtI.Uptime()
+      // uJ, eJ := dtJ.Uptime()
+      // switch {
+      // case eI != nil && eJ != nil: { return false }
+      // case eI != nil: { return true }
+      // case eJ != nil: { return false }
+      // }
+      // return uI < uJ
     },
   }
 }
 
+// DeepTaskMap sorting
+type dtmSort struct {
+  dtm DeepTaskMap
+  sKeys []string
+  less func( dtKeyI, dtKeyJ string) (bool)
+}
+func(sdtm dtmSort) Len() int { return len(sdtm.dtm) }
+func(sdtm dtmSort) Swap(i, j int) { sdtm.sKeys[i], sdtm.sKeys[j] = sdtm.sKeys[j], sdtm.sKeys[i] }
+func(sdtm dtmSort) Less(i, j int) (bool) { return sdtm.less(sdtm.sKeys[i], sdtm.sKeys[j]) }
 
+// This is klunky, but it's what I've got so far.
+// The use is: 
+// keys := dtm.TaskArns()
+// sort.Sort(awslib.DTMKeysByUptime(dtm, &keys))
+// for i, arn := range keys {}
+func DTMKeysByUptime(dtm DeepTaskMap, keys *[]string) (dtmSort) {
+  return dtmSort {
+    dtm: dtm,
+    sKeys: *keys,
+    less: func(dtKeyI, dtKeyJ string) (bool) {
+      return dtm[dtKeyI].UptimeLess(*dtm[dtKeyJ])
+    },
+  }
+}
+
+// func (dtm DeepTaskMap) ArnsByUptime() ([]string) {
+//   sortable := dtmByUptime(dtm)
+//   sort.Sort(sort.Reverse(sortable))
+//   return sortable.sKeys
+// }
 

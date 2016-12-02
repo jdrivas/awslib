@@ -149,7 +149,7 @@ func RestartService(serviceName, clusterName string, sess *session.Session, cb f
     s  := res.Service
     tdFamily := TaskDefinitionFamily(sOrig.TaskDefinition)
     params.TaskDefinition = aws.String(tdFamily)
-    params.DesiredCount = &oDCnt
+    params.DesiredCount = aws.Int64(oDCnt)
     params.DeploymentConfiguration = oDConfig
     // params.DeploymentConfiguration.MinimumHealthyPercent = oDConfig.MinimumHealthyPercent
     // *params.DeploymentConfiguration.MinimumHealthyPercent = 
