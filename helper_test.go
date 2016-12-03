@@ -15,7 +15,6 @@ func skipOnShort(t *testing.T) {
   if testing.Short() { t.SkipNow() }
 }
 
-
 func testSession(t *testing.T) (sess *session.Session ) {
   testProfile := "mclib-test"
   s, err := session.NewSessionWithOptions(session.Options{
@@ -59,7 +58,6 @@ func TestShortDurationString(t *testing.T) {
     {d: 24 *time.Hour, expect: "0d 24h"},
     {d: 24 *time.Hour, expect: "24h 0m"},
   }
-
 
 
   for _, tv := range trueValues {
