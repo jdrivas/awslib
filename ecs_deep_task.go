@@ -35,13 +35,13 @@ func (dtm DeepTaskMap) TaskArns() (arns []string) {
 // Deep task goes and gets all of it.
 // If this becomes a performance bottleneck then we can consdier
 // implementing lazy evaluation of these pointers.
-type DeepTask struct {
-  Task *ecs.Task
-  Failure *ecs.Failure
-  TaskDefinition *ecs.TaskDefinition
-  CInstance *ecs.ContainerInstance
-  CIFailure *ecs.Failure
-  EC2Instance *ec2.Instance
+type DeepTask struct {                // The json is as intended, the locationName allows us to use the AWS jsonutil.BuildJSON routines.
+  Task *ecs.Task                      `json:"task" locationName:"task"`
+  Failure *ecs.Failure                `json:"failure" locationName:"failure"`
+  TaskDefinition *ecs.TaskDefinition  `json:"taskDefinition" locationName:"taskDefinition"`
+  CInstance *ecs.ContainerInstance    `json:"containerInstance" locationName:"containerInstance"`
+  CIFailure *ecs.Failure              `json:"containerInstanceFailure" locationName:"containerInstanceFailure"`
+  EC2Instance *ec2.Instance           `json:"ec2Instance" locationName:"ec2Instance"`
 }
 
 
