@@ -2,6 +2,7 @@ package awslib
 
 import(
   // "fmt"
+  "sort"
   "github.com/aws/aws-sdk-go/aws/session"
   "github.com/aws/aws-sdk-go/service/ecr"
 )
@@ -40,6 +41,13 @@ func ByRepoCreatedAt(repos RepositoryList) (repoSort) {
   }
 }
 
+func ByRepoLastUpdate(repos RepositoryList) (repoSort) {
+  return repoSort{
+    repos: repos,
+    less: func( ir, jr *ecr.Repository) (bool) { return ir.CreatedAt.Before(*jr.CreatedAt) },
+  }
+}
+
 
 type ImageDetailList []*ecr.ImageDetail
 func GetImages(repositoryName string, sess *session.Session) (ids ImageDetailList, err error) {
@@ -56,7 +64,9 @@ func GetImages(repositoryName string, sess *session.Session) (ids ImageDetailLis
   return ids, err
 }
 
-// returns all the images indexed by repository name
+// returns all the images indexed by repository name. Each list of images is sorted
+// by reverse PushedAt time. So the the first image in the list is the most recently
+// pushed.
 func GetAllImages(sess *session.Session) (imageMap map[string]ImageDetailList, err error) {
   repos, err := GetRepositories(sess)
   if err != nil { return imageMap, err}
@@ -65,6 +75,7 @@ func GetAllImages(sess *session.Session) (imageMap map[string]ImageDetailList, e
   for _, r := range repos {
     idl, err := GetImages(*r.RepositoryName, sess)
     if err != nil { return imageMap, err }
+    sort.Sort(sort.Reverse(ByPushedAt(idl)))
     imageMap[*r.RepositoryName] = idl
   }
   return imageMap, err
