@@ -12,6 +12,8 @@ node_modules/
 Vagrantfile
 .vagrant
 
+.ecs-pilot_history
+
 # Architecture specific extensions/prefixes
 *.[568vq]
 [568vq].out
