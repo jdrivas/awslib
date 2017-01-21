@@ -66,20 +66,6 @@ func GetInstanceForId(instanceId string, sess *session.Session)(inst *ec2.Instan
   return inst, err
 }
 
-// func GetSecurityGrouoDescriptions(groupNames []*string, config *aws.Config ) ([]*ec2.SecurityGroup, error) {
-//   ec2_svc := ec2.New(session.New(config))
-//   params := &ec2.DescribeSecurityGroupsInput{
-//     DryRun: aws.Bool(false),
-//     GroupNames: groupNames,
-//   }
-//   resp, err := ec2_svc.DescribeSecurityGroups(params)
-//   groups := []*ec2.SecurityGroup{}
-//   if err != nil {
-//     groups = resp.SecurityGroups
-//   }
-//   return groups, err
-// }
-
 
 func LaunchInstanceWithTags(clusterName string, tags []*ec2.Tag, sess *session.Session) (*ec2.Reservation, error) {
   ec2Svc := ec2.New(sess)

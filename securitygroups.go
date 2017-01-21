@@ -21,6 +21,15 @@ func DescribeSecurityGroup(groupId string, sess *session.Session) (*ec2.Security
   return res.SecurityGroups[0], err
 }
 
+func DescribeSecurityGroups(groupIds []string, sess *session.Session) ([]*ec2.SecurityGroup, error) {
+  ec2Svc := ec2.New(sess);
+  ids := StringPSlice(groupIds)
+  params := &ec2.DescribeSecurityGroupsInput {
+    GroupIds: ids,
+  }
+  res, err := ec2Svc.DescribeSecurityGroups(params)
+  return res.SecurityGroups, err
+}
 
 // TODO: Revist the UserGroupPairs representation, we're leaving out data.
 const sgPlaceHolder = "-----"
