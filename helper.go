@@ -4,6 +4,7 @@ import(
   "fmt"
   "strings"
   "time"
+  "github.com/aws/aws-sdk-go/aws"
   "github.com/aws/aws-sdk-go/service/ecs"
 )
 
@@ -15,6 +16,14 @@ func StringSlice(sp []*string) ([]string) {
   }
   return s
 }
+func StringPSlice(sSlice []string) ([]*string) {
+  sp:= make([]*string, len(sSlice))
+  for i, s := range sSlice {
+    sp[i] = aws.String(s)
+  }
+  return sp
+}
+
 func JoinStringP(sp []*string, sep string) (v string) {
   // s := make([]string, len(sp))
   // for i, p := range sp {
