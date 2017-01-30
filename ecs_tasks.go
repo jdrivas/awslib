@@ -24,10 +24,9 @@ func ListTasks(clusterName string, sess *session.Session) ([]*string, error) {
   return resp.TaskArns, err
 }
 
-
 type ContainerTask struct {
-  Task *ecs.Task
-  Failure *ecs.Failure
+  Task *ecs.Task          `json: "task" locationName:"task"`
+  Failure *ecs.Failure    `json: "failure" locationName:"failure"`
 }
 
 func (ct *ContainerTask) UptimeString() (string) {
